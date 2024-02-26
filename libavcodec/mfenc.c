@@ -1213,6 +1213,7 @@ static int mf_close(AVCodecContext *avctx)
 static int mf_init(AVCodecContext *avctx)
 {
     int ret;
+    av_log(avctx, AV_LOG_INFO, "Test MediaFoundation Log\n");
     if ((ret = mf_load_library(avctx)) == 0) {
            if ((ret = mf_init_encoder(avctx)) == 0) {
                 return 0;
