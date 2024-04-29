@@ -831,7 +831,7 @@ int ff_encode_alloc_frame(AVCodecContext *avctx, AVFrame *frame)
 
     ret = avcodec_default_get_buffer2(avctx, frame, 0);
     if (ret < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+        av_log(avctx, AV_LOG_ERROR, "encode: get_buffer() failed\n");
         av_frame_unref(frame);
         return ret;
     }

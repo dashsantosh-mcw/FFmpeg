@@ -1688,7 +1688,7 @@ end:
 
 fail:
     if (ret < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+        av_log(avctx, AV_LOG_ERROR, "decode: get_buffer() failed\n");
         av_frame_unref(frame);
     }
 
