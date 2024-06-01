@@ -57,6 +57,9 @@ static const HWContextType * const hw_table[] = {
 #if CONFIG_VIDEOTOOLBOX
     &ff_hwcontext_type_videotoolbox,
 #endif
+#if CONFIG_MEDIAFOUNDATION
+    &ff_hwcontext_type_mf,
+#endif
 #if CONFIG_MEDIACODEC
     &ff_hwcontext_type_mediacodec,
 #endif
@@ -481,23 +484,35 @@ int av_hwframe_transfer_data(AVFrame *dst, const AVFrame *src, int flags)
 
         ret = src_ctx->internal->hw_type->transfer_data_from(src_ctx, dst, src);
         if (ret == AVERROR(ENOSYS))
+        {
+            av_log(src_ctx, AV_LOG_ERROR, "transfer data from source failed");
             ret = dst_ctx->internal->hw_type->transfer_data_to(dst_ctx, dst, src);
-        if (ret < 0)
+        }
+        if (ret < 0) {
+            av_log(src_ctx, AV_LOG_ERROR, "transfer data to source failed");
             return ret;
+        }
     } else {
         if (src->hw_frames_ctx) {
             ctx = (AVHWFramesContext*)src->hw_frames_ctx->data;
 
             ret = ctx->internal->hw_type->transfer_data_from(ctx, dst, src);
+
             if (ret < 0)
+            {
+                av_log(ctx, AV_LOG_ERROR, "transfer data from source failed hw_frames_ctx");
                 return ret;
+            }
         } else if (dst->hw_frames_ctx) {
             ctx = (AVHWFramesContext*)dst->hw_frames_ctx->data;
 
             ret = ctx->internal->hw_type->transfer_data_to(ctx, dst, src);
-            if (ret < 0)
+            if (ret < 0) {
+                av_log(ctx, AV_LOG_ERROR, "transfer data to source failed hw_frames_ctx");
                 return ret;
+            }
         } else {
+            av_log(ctx, AV_LOG_ERROR, "transfer error");
             return AVERROR(ENOSYS);
         }
     }

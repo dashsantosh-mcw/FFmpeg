@@ -508,10 +508,28 @@ const CLSID *ff_codec_to_mf_subtype(enum AVCodecID codec)
 {
     switch (codec) {
     case AV_CODEC_ID_H264:              return &MFVideoFormat_H264;
-    case AV_CODEC_ID_HEVC:              return &ff_MFVideoFormat_HEVC;
+    case AV_CODEC_ID_HEVC:              return &MFVideoFormat_HEVC;
+    case AV_CODEC_ID_MJPEG:             return &MFVideoFormat_MJPG;
+    case AV_CODEC_ID_MPEG2VIDEO:        return &MFVideoFormat_MPEG2;
+    case AV_CODEC_ID_MPEG4:             return &MFVideoFormat_MP4V;
+    case AV_CODEC_ID_MSMPEG4V1:
+    case AV_CODEC_ID_MSMPEG4V2:         return &ff_MFVideoFormat_MP42;
+    case AV_CODEC_ID_MSMPEG4V3:         return &MFVideoFormat_MP43;
+    case AV_CODEC_ID_WMV1:              return &MFVideoFormat_WMV1;
+    case AV_CODEC_ID_WMV2:              return &MFVideoFormat_WMV2;
+    case AV_CODEC_ID_WMV3:              return &MFVideoFormat_WMV3;
+    case AV_CODEC_ID_VC1:               return &MFVideoFormat_WVC1;
     case AV_CODEC_ID_AC3:               return &MFAudioFormat_Dolby_AC3;
+    case AV_CODEC_ID_EAC3:              return &MFAudioFormat_Dolby_DDPlus;
     case AV_CODEC_ID_AAC:               return &MFAudioFormat_AAC;
+    case AV_CODEC_ID_MP1:               return &MFAudioFormat_MPEG;
+    case AV_CODEC_ID_MP2:               return &MFAudioFormat_MPEG;
     case AV_CODEC_ID_MP3:               return &MFAudioFormat_MP3;
+    case AV_CODEC_ID_WMAVOICE:          return &MFAudioFormat_MSP1;
+    case AV_CODEC_ID_WMAV1:             return &ff_MFAudioFormat_MSAUDIO1;
+    case AV_CODEC_ID_WMAV2:             return &MFAudioFormat_WMAudioV8;
+    case AV_CODEC_ID_WMAPRO:            return &MFAudioFormat_WMAudioV9;
+    case AV_CODEC_ID_WMALOSSLESS:       return &MFAudioFormat_WMAudio_Lossless;
     default:                            return NULL;
     }
 }
