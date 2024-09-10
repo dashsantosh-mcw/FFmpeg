@@ -7481,7 +7481,8 @@ elif enabled iconv; then
     check_func_headers iconv.h iconv || check_lib iconv iconv.h iconv -liconv
 fi
 
-enabled debug && add_cflags -g"$debuglevel" && add_asflags -g"$debuglevel"
+enabled debug && add_cflags -g"$debuglevel" -gcodeview -Wl,--pdb= && add_asflags -g"$debuglevel"
+enabled debug && add_ldexeflags -Wl-debug -Wl,--pdb=
 
 # add some useful compiler flags if supported
 check_cflags -Wall
