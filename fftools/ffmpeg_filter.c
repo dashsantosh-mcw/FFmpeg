@@ -1052,8 +1052,149 @@ static const AVClass fg_class = {
     .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
+// int fg_create(FilterGraph **pfg, char *graph_desc, Scheduler *sch)
+// {
+//     printf("INSIDE fg_Create\n");
+//     FilterGraphPriv *fgp;
+//     FilterGraph      *fg;
+
+//     AVFilterInOut *inputs, *outputs;
+//     AVFilterGraph *graph;
+//     int ret = 0;
+
+//     fgp = av_mallocz(sizeof(*fgp));
+//     if (!fgp) {
+//         av_freep(&graph_desc);
+//         return AVERROR(ENOMEM);
+//     }
+//     fg = &fgp->fg;
+
+//     if (pfg) {
+//         *pfg = fg;
+//         fg->index = -1;
+//     } else {
+//         ret = av_dynarray_add_nofree(&filtergraphs, &nb_filtergraphs, fgp);
+//         if (ret < 0) {
+//             av_freep(&graph_desc);
+//             av_freep(&fgp);
+//             return ret;
+//         }
+
+//         fg->index = nb_filtergraphs - 1;
+//     }
+
+//     fg->class       = &fg_class;
+//     fgp->graph_desc = graph_desc;
+//     fgp->disable_conversions = !auto_conversion_filters;
+//     fgp->sch                 = sch;
+
+//     snprintf(fgp->log_name, sizeof(fgp->log_name), "fc#%d", fg->index);
+
+//     fgp->frame     = av_frame_alloc();
+//     fgp->frame_enc = av_frame_alloc();
+//     if (!fgp->frame || !fgp->frame_enc)
+//         return AVERROR(ENOMEM);
+
+//     /* this graph is only used for determining the kinds of inputs
+//      * and outputs we have, and is discarded on exit from this function */
+//     graph = avfilter_graph_alloc();
+//     if (!graph)
+//         return AVERROR(ENOMEM);;
+//     graph->nb_threads = 1;
+
+//     printf("GOING INSIDE graph_parse\n");
+//     ret = graph_parse(fg, graph, fgp->graph_desc, &inputs, &outputs,
+//                       hw_device_for_filter());
+//     if (ret < 0)
+//         goto fail;
+
+//     for (unsigned i = 0; i < graph->nb_filters; i++) {
+//         const AVFilter *f = graph->filters[i]->filter;
+//         if ((!avfilter_filter_pad_count(f, 0) &&
+//              !(f->flags & AVFILTER_FLAG_DYNAMIC_INPUTS)) ||
+//             !strcmp(f->name, "apad")) {
+//             fgp->have_sources = 1;
+//             break;
+//         }
+//     }
+
+//     for (AVFilterInOut *cur = inputs; cur; cur = cur->next) {
+//         InputFilter *const ifilter = ifilter_alloc(fg);
+//         InputFilterPriv       *ifp;
+
+//         if (!ifilter) {
+//             ret = AVERROR(ENOMEM);
+//             goto fail;
+//         }
+
+//         ifp            = ifp_from_ifilter(ifilter);
+//         ifp->linklabel = cur->name;
+//         cur->name      = NULL;
+
+//         ifp->type      = avfilter_pad_get_type(cur->filter_ctx->input_pads,
+//                                                cur->pad_idx);
+
+//         if (ifp->type != AVMEDIA_TYPE_VIDEO && ifp->type != AVMEDIA_TYPE_AUDIO) {
+//             av_log(fg, AV_LOG_FATAL, "Only video and audio filters supported "
+//                    "currently.\n");
+//             ret = AVERROR(ENOSYS);
+//             goto fail;
+//         }
+
+//         ifilter->name  = describe_filter_link(fg, cur, 1);
+//         if (!ifilter->name) {
+//             ret = AVERROR(ENOMEM);
+//             goto fail;
+//         }
+//     }
+
+//     for (AVFilterInOut *cur = outputs; cur; cur = cur->next) {
+//         const enum AVMediaType type = avfilter_pad_get_type(cur->filter_ctx->output_pads,
+//                                                             cur->pad_idx);
+//         OutputFilter *const ofilter = ofilter_alloc(fg, type);
+
+//         if (!ofilter) {
+//             ret = AVERROR(ENOMEM);
+//             goto fail;
+//         }
+
+//         ofilter->linklabel = cur->name;
+//         cur->name          = NULL;
+
+//         ofilter->name      = describe_filter_link(fg, cur, 0);
+//         if (!ofilter->name) {
+//             ret = AVERROR(ENOMEM);
+//             goto fail;
+//         }
+//     }
+
+//     if (!fg->nb_outputs) {
+//         printf("printing inside error if : %d",fg->nb_outputs);
+//         av_log(fg, AV_LOG_FATAL, "A filtergraph has zero outputs, this is not supported\n");
+//         ret = AVERROR(ENOSYS);
+//         goto fail;
+//     }
+
+//     ret = sch_add_filtergraph(sch, fg->nb_inputs, fg->nb_outputs,
+//                               filter_thread, fgp);
+//     if (ret < 0)
+//         goto fail;
+//     fgp->sch_idx = ret;
+
+// fail:
+//     avfilter_inout_free(&inputs);
+//     avfilter_inout_free(&outputs);
+//     avfilter_graph_free(&graph);
+
+//     if (ret < 0)
+//         return ret;
+
+//     return 0;
+// }
+
 int fg_create(FilterGraph **pfg, char *graph_desc, Scheduler *sch)
 {
+    printf("INSIDE fg_Create\n");
     FilterGraphPriv *fgp;
     FilterGraph      *fg;
 
@@ -1098,16 +1239,30 @@ int fg_create(FilterGraph **pfg, char *graph_desc, Scheduler *sch)
      * and outputs we have, and is discarded on exit from this function */
     graph = avfilter_graph_alloc();
     if (!graph)
-        return AVERROR(ENOMEM);;
+        return AVERROR(ENOMEM);
     graph->nb_threads = 1;
+
+    printf("GOING INSIDE graph_parse\n");
+    // Set graph description with buffer, scale_d3d11, and buffersink filters : The below hardcoded line should be changed
+    fgp->graph_desc = "buffer=width=2160:height=3840:pix_fmt=0:time_base=1/30, scale_d3d11=width=1920:height=1080, buffersink";
+
+    printf("Graph description: %s\n", fgp->graph_desc);
 
     ret = graph_parse(fg, graph, fgp->graph_desc, &inputs, &outputs,
                       hw_device_for_filter());
-    if (ret < 0)
+    if (ret < 0) {
+        printf("Error in graph_parse: %d\n", ret);
         goto fail;
+    }
+
+    // Debug prints for inputs, outputs, and filters after graph_parse
+    printf("Number of filters in graph: %d\n", graph->nb_filters);
+    printf("Number of inputs: %d\n", fg->nb_inputs);
+    printf("Number of outputs: %d\n", fg->nb_outputs);
 
     for (unsigned i = 0; i < graph->nb_filters; i++) {
         const AVFilter *f = graph->filters[i]->filter;
+        printf("Filter #%d: %s\n", i, f->name);
         if ((!avfilter_filter_pad_count(f, 0) &&
              !(f->flags & AVFILTER_FLAG_DYNAMIC_INPUTS)) ||
             !strcmp(f->name, "apad")) {
@@ -1167,6 +1322,7 @@ int fg_create(FilterGraph **pfg, char *graph_desc, Scheduler *sch)
     }
 
     if (!fg->nb_outputs) {
+        printf("Error: Filter graph has zero outputs. fg->nb_outputs: %d\n", fg->nb_outputs);
         av_log(fg, AV_LOG_FATAL, "A filtergraph has zero outputs, this is not supported\n");
         ret = AVERROR(ENOSYS);
         goto fail;
