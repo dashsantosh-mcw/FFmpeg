@@ -68,24 +68,24 @@ static int d3d11scale_init(AVFilterContext* ctx) {
     }
     av_log(ctx, AV_LOG_VERBOSE, "D3D11 device created\n");
 
-    s->hw_frames_ctx = av_hwframe_ctx_alloc(s->device);
-    AVHWFramesContext *frames_ctx = (AVHWFramesContext *)s->hw_frames_ctx->data;
-    if (!frames_ctx) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to allocate AVHWFramesContext.\n");
-        return AVERROR(ENOMEM);
-    }
-    av_log(ctx, AV_LOG_VERBOSE, "FRAMES ALLOCATED\n");
-    frames_ctx->format = AV_PIX_FMT_D3D11;
-    frames_ctx->sw_format = AV_PIX_FMT_NV12;
-    frames_ctx->width = s->width;
-    frames_ctx->height = s->height;
-    frames_ctx->initial_pool_size = 32;  // Increase pool size to handle more frames
+    // s->hw_frames_ctx = av_hwframe_ctx_alloc(s->device);
+    // AVHWFramesContext *frames_ctx = (AVHWFramesContext *)s->hw_frames_ctx->data;
+    // if (!frames_ctx) {
+    //     av_log(ctx, AV_LOG_ERROR, "Failed to allocate AVHWFramesContext.\n");
+    //     return AVERROR(ENOMEM);
+    // }
+    // av_log(ctx, AV_LOG_VERBOSE, "FRAMES ALLOCATED\n");
+    // frames_ctx->format = AV_PIX_FMT_D3D11;
+    // frames_ctx->sw_format = AV_PIX_FMT_NV12;
+    // frames_ctx->width = s->width;
+    // frames_ctx->height = s->height;
+    // frames_ctx->initial_pool_size = 32;  // Increase pool size to handle more frames
 
-    if (av_hwframe_ctx_init(frames_ctx) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to initialize AVHWFramesContext.\n");
-        return AVERROR_EXTERNAL;
-    }
-    s->hw_frames_ctx = frames_ctx;
+    // if (av_hwframe_ctx_init(frames_ctx) < 0) {
+    //     av_log(ctx, AV_LOG_ERROR, "Failed to initialize AVHWFramesContext.\n");
+    //     return AVERROR_EXTERNAL;
+    // }
+    // s->hw_frames_ctx = frames_ctx;
 
     av_log(ctx, AV_LOG_VERBOSE, "D3D11 device and hardware frames context created\n");
     return 0;
