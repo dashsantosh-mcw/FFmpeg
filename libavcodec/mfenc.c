@@ -332,7 +332,7 @@ static IMFSample *mf_v_avframe_to_sample(AVCodecContext *avctx, const AVFrame *f
     HRESULT hr;
     int ret;
     int size;
-
+    
     av_log(avctx, AV_LOG_VERBOSE, "Outside frame format D3D11\n");
 
     if (frame->format == AV_PIX_FMT_D3D11) {
@@ -349,70 +349,70 @@ static IMFSample *mf_v_avframe_to_sample(AVCodecContext *avctx, const AVFrame *f
         d3d11_texture->lpVtbl->GetDesc(d3d11_texture, &desc);
         av_log(avctx, AV_LOG_VERBOSE, "After GET Desc texture %p\n", d3d11_texture);
 
-        // D3D11_TEXTURE2D_DESC desc2;
+        // D3D11_TEXTURE2D_DESC
+        
+        
+        //  desc2;
         // texture->GetDesc(&desc2);
+
+        av_log(avctx, AV_LOG_VERBOSE, "Desc: %d %d %d %d %d %d\n", desc.Width, desc.Height, desc.MipLevels, desc.ArraySize, subIdx, desc.Format);
 
         ID3D11VideoProcessorInputView* inputView = NULL;
         D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {};
         inputViewDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
-        inputViewDesc.Texture2D.MipSlice = desc.MipLevels;
+        inputViewDesc.Texture2D.ArraySlice = subIdx;
+        inputViewDesc.Texture2D.MipSlice = 0;
+        // int subResIdx = (inputViewDesc.Texture2D.ArraySlice * desc.MipLevels) + inputViewDesc.Texture2D.MipSlice;
 
-        D3D11_BOX box = {
-          .left = 0,
-           .top = 0,
-           .front = 0,
-           .right = (UINT)avctx->width,
-           .bottom = (UINT)avctx->height,
-           .back = 1,
-        };
-        ID3D11Texture2D* d3d11_vp_input_texture = NULL;
+        // D3D11_BOX box = {
+        //   .left = 0,
+        //    .top = 0,
+        //    .front = 0,
+        //    .right = (UINT)avctx->width,
+        //    .bottom = (UINT)avctx->height,
+        //    .back = 1,
+        // };
+        // ID3D11Texture2D* d3d11_vp_input_texture = NULL;
 
-        D3D11_TEXTURE2D_DESC ipTexDesc = { 0 };
-        ipTexDesc.Width = avctx->width;
-        ipTexDesc.Height = avctx->height;
-        ipTexDesc.MipLevels = 1;
-        ipTexDesc.ArraySize = 1;
-        ipTexDesc.Format = DXGI_FORMAT_NV12;
-        ipTexDesc.SampleDesc.Count = 1;
-        ipTexDesc.Usage = D3D11_USAGE_DEFAULT;
-        ipTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-        ipTexDesc.MiscFlags = 0;
+        // D3D11_TEXTURE2D_DESC ipTexDesc = { 0 };
+        // ipTexDesc.Width = avctx->width;
+        // ipTexDesc.Height = avctx->height;
+        // ipTexDesc.MipLevels = 1;
+        // ipTexDesc.ArraySize = 1;
+        // ipTexDesc.Format = DXGI_FORMAT_NV12;
+        // ipTexDesc.SampleDesc.Count = 1;
+        // ipTexDesc.Usage = D3D11_USAGE_DEFAULT;
+        // ipTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        // ipTexDesc.MiscFlags = 0;
 
-        hr = c->d3d_device->lpVtbl->CreateTexture2D(c->d3d_device, &ipTexDesc, NULL, &d3d11_vp_input_texture);
-        av_log(avctx, AV_LOG_VERBOSE, "Created Texture 2D...\n");
-        if (FAILED(hr)) {
-            av_log(avctx, AV_LOG_ERROR, "Failed to create ip texture \n");
-            return NULL;
-        }
-        else {
-            av_log(avctx, AV_LOG_ERROR, "IP texture created \n");
-        }
-        av_log(avctx, AV_LOG_ERROR, "before copy subresource \n");
-        c->d3d_context->lpVtbl->CopySubresourceRegion(c->d3d_context, (ID3D11Resource*)d3d11_vp_input_texture, 0, 0, 0, 0, (ID3D11Resource*)d3d11_texture, subIdx, &box);
-        av_log(avctx, AV_LOG_ERROR, "after copy subresource \n");
-       
-
-        if (FAILED(hr)) {
-           av_log(avctx, AV_LOG_ERROR, "Failed to get video device interface: %x\n", hr);
-           return NULL;
-        }
-        av_log(avctx, AV_LOG_ERROR, "before create input view\n");
-        hr = ID3D11VideoDevice_CreateVideoProcessorInputView(c->d3d_videoDevice, d3d11_vp_input_texture, c->videoProcessorEnumerator, &inputViewDesc, &inputView);
-        av_log(avctx, AV_LOG_ERROR, "after create input view\n");
-        if (FAILED(hr)) {
-           av_log(avctx, AV_LOG_ERROR, "Failed to create video processor input view: %x\n", hr);
-           return NULL;
-        }
-
-        //Error comes here saying hr = 0x80070057 which means the parameter is incorrect. Not sure where
-        // av_log(avctx, AV_LOG_VERBOSE, "inputViewDesc.ViewDimension = %d\n", inputViewDesc.ViewDimension);
-        // av_log(avctx, AV_LOG_VERBOSE, "inputViewDesc.Texture2D.MipSlice = %d\n", inputViewDesc.Texture2D.MipSlice);
-        // hr = videoDevice->lpVtbl->CreateVideoProcessorInputView(videoDevice, d3d11_vp_input_texture, videoProcessorEnumerator, &inputViewDesc, &inputView);
+        // hr = c->d3d_device->lpVtbl->CreateTexture2D(c->d3d_device, &ipTexDesc, NULL, &d3d11_vp_input_texture);
+        // av_log(avctx, AV_LOG_VERBOSE, "Created Texture 2D...\n");
         // if (FAILED(hr)) {
-        //     av_log(avctx, AV_LOG_ERROR, "Failed to create video processor input view.");
-        //     av_log(avctx, AV_LOG_ERROR, "CreateVideoProcessorInputView failed with hr = 0x%lx\n", hr);
+        //     av_log(avctx, AV_LOG_ERROR, "Failed to create ip texture: %lx \n", hr);
         //     return NULL;
         // }
+        // else {
+        //     av_log(avctx, AV_LOG_ERROR, "IP texture created \n");
+        // }
+        // av_log(avctx, AV_LOG_ERROR, "before copy subresource \n");
+        // c->d3d_context->lpVtbl->CopySubresourceRegion(c->d3d_context, (ID3D11Resource*)d3d11_vp_input_texture, 0, 0, 0, 0, (ID3D11Resource*)d3d11_texture, subIdx, NULL);
+        // av_log(avctx, AV_LOG_ERROR, "after copy subresource \n");
+       
+
+        // if (FAILED(hr)) {
+        //    av_log(avctx, AV_LOG_ERROR, "Failed to get video device interface: %lx\n", hr);
+        //    return NULL;
+        // }
+        av_log(avctx, AV_LOG_ERROR, "before create input view\n");
+        hr = ID3D11VideoDevice_CreateVideoProcessorInputView(c->d3d_videoDevice, d3d11_texture, c->videoProcessorEnumerator, &inputViewDesc, &inputView);
+        av_log(avctx, AV_LOG_ERROR, "after create input view\n");
+        if (FAILED(hr)) {
+           av_log(avctx, AV_LOG_ERROR, "Failed to create video processor input view: %lx\n", hr);
+           return NULL;
+        }
+        else {
+            av_log(avctx, AV_LOG_ERROR, "Video processor input view created \n");
+        }
 
         D3D11_VIDEO_PROCESSOR_STREAM stream = {};
         stream.Enable = TRUE;
@@ -421,12 +421,17 @@ static IMFSample *mf_v_avframe_to_sample(AVCodecContext *avctx, const AVFrame *f
 
         ID3D11VideoContext* videoContext = NULL;
         hr = ID3D11DeviceContext_QueryInterface(c->d3d_context, &IID_ID3D11VideoContext, (void**)&videoContext);
-        
+
         av_log(avctx, AV_LOG_ERROR, "before vpb\n");
         hr = ID3D11VideoContext_VideoProcessorBlt(videoContext, c->d3d11_processor, c->d3d11_vp_output_view, 0, 1, &stream);
-        av_log(avctx, AV_LOG_ERROR, "after vpb\n");
         if (FAILED(hr)) {
-            av_log(NULL, AV_LOG_ERROR, "VideoProcessorBlt failed.");
+            av_log(avctx, AV_LOG_ERROR, "VideoProcessorBlt failed with hr = 0x%lx\n", hr);
+            return NULL;
+        }
+        av_log(avctx, AV_LOG_ERROR, "after vpb\n");
+
+        if (FAILED(hr)) {
+            av_log(avctx, AV_LOG_ERROR, "VideoProcessorBlt failed.");
             return NULL;
         }
 
@@ -445,15 +450,17 @@ static IMFSample *mf_v_avframe_to_sample(AVCodecContext *avctx, const AVFrame *f
         if (FAILED(hr))
             return NULL;
 
-        hr = func->MFCreateDXGISurfaceBuffer(&IID_ID3D11Texture2D, d3d11_texture, subIdx, 0, &buffer);
-        av_log(avctx, AV_LOG_VERBOSE, "create buffer hr %x\n", hr);
+        hr = func->MFCreateDXGISurfaceBuffer(&IID_ID3D11Texture2D, c->d3d11_vp_output_texture, 0, 0, &buffer);
+        av_log(avctx, AV_LOG_VERBOSE, "create buffer hr %lx\n", hr);
         if (FAILED(hr)) {
             IMFSample_Release(sample);
             return NULL;
         }
+        hr = IMFMediaBuffer_SetCurrentLength(buffer, (1.5 * avctx->height * avctx->width));
+        av_log(avctx, AV_LOG_VERBOSE, "setcurrent length hr %lx\n", hr);
 
         hr = IMFSample_AddBuffer(sample, buffer);
-        av_log(avctx, AV_LOG_VERBOSE, "add buffer hr %x\n", hr);
+        av_log(avctx, AV_LOG_VERBOSE, "add buffer hr %lx\n", hr);
         IMFMediaBuffer_Release(buffer);
         if (FAILED(hr)) {
             IMFSample_Release(sample);
@@ -496,7 +503,7 @@ static IMFSample *mf_v_avframe_to_sample(AVCodecContext *avctx, const AVFrame *f
     IMFSample_SetSampleTime(sample, mf_to_mf_time(avctx, frame->pts));
     IMFSample_SetSampleDuration(sample, mf_to_mf_time(avctx, frame->duration));
 
-    av_log(avctx, AV_LOG_VERBOSE, "After adding Sample Time and Sample Duration %d  %d\n", frame->pts, frame->duration);
+    av_log(avctx, AV_LOG_VERBOSE, "After adding Sample Time and Sample Duration %d  %lld\n", frame->pts ,mf_to_mf_time(avctx, frame->duration));
     return sample;
 }
 
@@ -536,6 +543,7 @@ static int mf_send_sample(AVCodecContext *avctx, IMFSample *sample)
         av_log(avctx, AV_LOG_VERBOSE, "Inside mf_send_sample_, inside If Sample Addr %p\n", sample);
         av_log(avctx, AV_LOG_VERBOSE, "mft, in_stream_id %p    %u\n", c->mft, c->in_stream_id);
         hr = IMFTransform_ProcessInput(c->mft, c->in_stream_id, sample, 0);
+        av_log(avctx, AV_LOG_VERBOSE, "after  processInput hr %lx\n", hr);
         if (hr == MF_E_NOTACCEPTING) {
             return AVERROR(EAGAIN);
         } else if (FAILED(hr)) {
@@ -1316,20 +1324,20 @@ static int mf_init_encoder(AVCodecContext *avctx)
         
         // Create MF Device Manager
         hr = func->MFCreateDXGIDeviceManager(&c->resetToken, &c->dxgiManager);
-        av_log(avctx, AV_LOG_VERBOSE, "after creation hr = %x \n", hr);
+        av_log(avctx, AV_LOG_VERBOSE, "after creation hr = %lx \n", hr);
         if (SUCCEEDED(hr)) {
             av_log(avctx, AV_LOG_VERBOSE, "reseting device");
             hr = IMFDXGIDeviceManager_ResetDevice(c->dxgiManager, c->d3d_device, c->resetToken);
-            av_log(avctx, AV_LOG_VERBOSE, "after resetting hr = %x \n", hr);
+            av_log(avctx, AV_LOG_VERBOSE, "after resetting hr = %lx \n", hr);
 
             if (SUCCEEDED(hr)) {
-                av_log(avctx, AV_LOG_VERBOSE, "reset device manager hr %x\n", hr);
+                av_log(avctx, AV_LOG_VERBOSE, "reset device manager hr %lx\n", hr);
             }
             av_log(avctx, AV_LOG_VERBOSE, "creating manager done...");
         }
     }
 
-    hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)c->dxgiManager);
+    // hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)c->dxgiManager);
     if (FAILED(hr)){
         av_log(avctx, AV_LOG_ERROR, "failed to set manager: %s\n", ff_hr_str(hr));
     } else {
@@ -1341,7 +1349,7 @@ static int mf_init_encoder(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_VERBOSE,"Failed to get video device interface.\n");
         return AVERROR_EXTERNAL;
     }
-
+    av_log(avctx, AV_LOG_VERBOSE, "printiing content desc... width - %d, height - %d\n", avctx->width, avctx->height);
     D3D11_VIDEO_PROCESSOR_CONTENT_DESC contentDesc = {};
     contentDesc.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
     contentDesc.InputWidth = avctx->width;
@@ -1369,6 +1377,7 @@ static int mf_init_encoder(AVCodecContext *avctx)
     output_view_desc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
     output_view_desc.Texture2D.MipSlice = 0;
 
+// subidx =  (arrayslice * miplevel) + mipslice
     D3D11_TEXTURE2D_DESC opTexDesc = { 0 };
     opTexDesc.Width = avctx->width;
     opTexDesc.Height = avctx->height;
@@ -1377,7 +1386,7 @@ static int mf_init_encoder(AVCodecContext *avctx)
     opTexDesc.Format = DXGI_FORMAT_NV12;
     opTexDesc.SampleDesc.Count = 1;
     opTexDesc.Usage = D3D11_USAGE_DEFAULT;
-    opTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    opTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_VIDEO_ENCODER;
     opTexDesc.MiscFlags = 0;
 
     hr = ID3D11Device_CreateTexture2D(c->d3d_device, &opTexDesc, NULL, &c->d3d11_vp_output_texture);
@@ -1511,6 +1520,22 @@ static int mf_close(AVCodecContext *avctx)
 
     if (c->codec_api)
         ICodecAPI_Release(c->codec_api);
+    if(c->videoProcessorEnumerator)
+        ID3D11VideoProcessorEnumerator_Release(c->videoProcessorEnumerator);
+    if(c->d3d11_processor)
+        ID3D11VideoProcessor_Release(c->d3d11_processor);
+    if(c->d3d_device)
+        ID3D11Device_Release(c->d3d_device);
+    if(c->d3d_context)
+        ID3D11DeviceContext_Release(c->d3d_context);
+    if(c->d3d_videoDevice)
+        ID3D11VideoDevice_Release(c->d3d_videoDevice);
+    if(c->d3d11_vp_output_view)
+        ID3D11VideoProcessorOutputView_Release(c->d3d11_vp_output_view);
+    if(c->d3d11_vp_input_view)
+        ID3D11VideoProcessorInputView_Release(c->d3d11_vp_input_view);
+    if(c->d3d11_vp_output_texture)
+        ID3D11Texture2D_Release(c->d3d11_vp_output_texture);
 
     if (c->async_events)
         IMFMediaEventGenerator_Release(c->async_events);
@@ -1520,6 +1545,7 @@ static int mf_close(AVCodecContext *avctx)
         ff_free_mf(&c->functions, &c->mft);
 
     dlclose(c->library);
+    dlclose(c->d3d_dll);
     c->library = NULL;
 #else
     ff_free_mf(&c->functions, &c->mft);
