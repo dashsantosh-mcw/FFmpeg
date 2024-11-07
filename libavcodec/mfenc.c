@@ -1386,7 +1386,7 @@ static int mf_init_encoder(AVCodecContext *avctx)
     opTexDesc.Format = DXGI_FORMAT_NV12;
     opTexDesc.SampleDesc.Count = 1;
     opTexDesc.Usage = D3D11_USAGE_DEFAULT;
-    opTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_VIDEO_ENCODER;
+    opTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_VIDEO_ENCODER;
     opTexDesc.MiscFlags = 0;
 
     hr = ID3D11Device_CreateTexture2D(c->d3d_device, &opTexDesc, NULL, &c->d3d11_vp_output_texture);
