@@ -182,8 +182,11 @@ static int get_video_buffer(AVFrame *frame, int align)
         return AVERROR(EINVAL);
 
     if ((ret = av_image_check_size(frame->width, frame->height, 0, NULL)) < 0)
+    {
+        av_log(frame, AV_LOG_ERROR,
+                       "Error in av_image_check_size value: %d %d\n",frame->width, frame->height);
         return ret;
-
+    }
     if (!frame->linesize[0]) {
         if (align <= 0)
             align = ALIGN;
@@ -192,7 +195,10 @@ static int get_video_buffer(AVFrame *frame, int align)
             ret = av_image_fill_linesizes(frame->linesize, frame->format,
                                           FFALIGN(frame->width, i));
             if (ret < 0)
-                return ret;
+            {
+                    av_log(frame, AV_LOG_ERROR,
+                       "Error in av_image_fill_linesizes function call ret value is %d and frame format is %d\n",ret, frame->format);
+            }
             if (!(frame->linesize[0] & (align-1)))
                 break;
         }
@@ -207,7 +213,10 @@ static int get_video_buffer(AVFrame *frame, int align)
     padded_height = FFALIGN(frame->height, 32);
     if ((ret = av_image_fill_plane_sizes(sizes, frame->format,
                                          padded_height, linesizes)) < 0)
+                                         {av_log(frame, AV_LOG_ERROR,
+                       "Error in av_image_fill_plane_sizes function call ret value is %d and frame format is %d\n",ret, frame->format);
         return ret;
+}
 
     total_size = 4*plane_padding;
     for (int i = 0; i < 4; i++) {
@@ -218,14 +227,19 @@ static int get_video_buffer(AVFrame *frame, int align)
 
     frame->buf[0] = av_buffer_alloc(total_size);
     if (!frame->buf[0]) {
+        av_log(frame, AV_LOG_ERROR,
+                       "Error in av_buffer_alloc \n");
         ret = AVERROR(ENOMEM);
         goto fail;
     }
 
     if ((ret = av_image_fill_pointers(frame->data, frame->format, padded_height,
                                       frame->buf[0]->data, frame->linesize)) < 0)
+                                      {
+        av_log(frame, AV_LOG_ERROR,
+                       "Error in av_image_fill_pointers \n");
         goto fail;
-
+                                      }
     for (int i = 1; i < 4; i++) {
         if (frame->data[i])
             frame->data[i] += i * plane_padding;
@@ -295,7 +309,11 @@ int av_frame_get_buffer(AVFrame *frame, int align)
         return AVERROR(EINVAL);
 
     if (frame->width > 0 && frame->height > 0)
+    {
+        av_log(frame, AV_LOG_ERROR,
+                       "Error in function call - get_video_buffer - %d\n", get_video_buffer(frame, align));
         return get_video_buffer(frame, align);
+}
     else if (frame->nb_samples > 0 &&
              (av_channel_layout_check(&frame->ch_layout)))
         return get_audio_buffer(frame, align);
@@ -400,21 +418,40 @@ int av_frame_ref(AVFrame *dst, const AVFrame *src)
 
     ret = frame_copy_props(dst, src, 0);
     if (ret < 0)
+    {    av_log(dst, AV_LOG_ERROR,
+                       "Error in frame_copy_props ret value: %s\n", av_err2str(ret));
         goto fail;
+    }
 
     ret = av_channel_layout_copy(&dst->ch_layout, &src->ch_layout);
+
     if (ret < 0)
-        goto fail;
+    {
+        av_log(dst, AV_LOG_ERROR,
+                       "Error in av_channel_layout_copy ret value: %s\n", av_err2str(ret));
+                       goto fail;
+    }
+        
 
     /* duplicate the frame data if it's not refcounted */
+    av_log(dst, AV_LOG_ERROR,
+                       "Printing src->buf value: %s\n", src->buf);
     if (!src->buf[0]) {
         ret = av_frame_get_buffer(dst, 0);
         if (ret < 0)
+        {
+        av_log(dst, AV_LOG_ERROR,
+                    "Error in av_frame_get_buffer ret value: %s\n", av_err2str(ret));
             goto fail;
+        }
 
         ret = av_frame_copy(dst, src);
         if (ret < 0)
+        {
+            av_log(dst, AV_LOG_ERROR,
+            "Error in av_frame_copy ret value: %s\n", av_err2str(ret));
             goto fail;
+        }
 
         return 0;
     }
@@ -425,6 +462,8 @@ int av_frame_ref(AVFrame *dst, const AVFrame *src)
             continue;
         dst->buf[i] = av_buffer_ref(src->buf[i]);
         if (!dst->buf[i]) {
+            av_log(dst, AV_LOG_VERBOSE,
+            "Debug in av_buffer_ref ret value: %s\n", av_err2str(ret));
             ret = AVERROR(ENOMEM);
             goto fail;
         }
@@ -434,6 +473,8 @@ int av_frame_ref(AVFrame *dst, const AVFrame *src)
         dst->extended_buf = av_calloc(src->nb_extended_buf,
                                       sizeof(*dst->extended_buf));
         if (!dst->extended_buf) {
+            av_log(dst, AV_LOG_VERBOSE,
+            "Debug in av_calloc ret value: %s\n", av_err2str(ret));
             ret = AVERROR(ENOMEM);
             goto fail;
         }
@@ -442,6 +483,8 @@ int av_frame_ref(AVFrame *dst, const AVFrame *src)
         for (int i = 0; i < src->nb_extended_buf; i++) {
             dst->extended_buf[i] = av_buffer_ref(src->extended_buf[i]);
             if (!dst->extended_buf[i]) {
+                av_log(dst, AV_LOG_VERBOSE,
+                "Debug in av_buffer_ref ret value: %s\n", av_err2str(ret));
                 ret = AVERROR(ENOMEM);
                 goto fail;
             }
@@ -451,6 +494,8 @@ int av_frame_ref(AVFrame *dst, const AVFrame *src)
     if (src->hw_frames_ctx) {
         dst->hw_frames_ctx = av_buffer_ref(src->hw_frames_ctx);
         if (!dst->hw_frames_ctx) {
+            av_log(dst, AV_LOG_VERBOSE,
+                "Debug in av_buffer_ref ret value: %s\n", av_err2str(ret));
             ret = AVERROR(ENOMEM);
             goto fail;
         }
