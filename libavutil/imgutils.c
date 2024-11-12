@@ -94,19 +94,19 @@ int av_image_fill_linesizes(int linesizes[4], enum AVPixelFormat pix_fmt, int wi
     int max_step_comp[4];       /* the component for each plane which has the max pixel step */
 
     memset(linesizes, 0, 4*sizeof(linesizes[0]));
-    printf("Error in if statement Descriptor Flags - %llu\n", (desc->flags));
+    // printf("Error in if statement Descriptor Flags - %llu\n", (desc->flags));
     if (!desc || desc->flags & AV_PIX_FMT_FLAG_HWACCEL)
     {
     if (!desc) {
         printf("desc is NULL\n");
     } else if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) {
-        printf("desc->flags has AV_PIX_FMT_FLAG_HWACCEL set\n");
+        // printf("desc->flags has AV_PIX_FMT_FLAG_HWACCEL set\n");
     } else {
         printf("Both conditions are false\n");
     }
-        printf("Error in if statement Pixel Format - %d\n", (pix_fmt));
-        printf("Error in if statement Descriptor - %p\n", (desc));
-        printf("Error in if statement Flags - %d\n", (AV_PIX_FMT_FLAG_HWACCEL));
+        // printf("Error in if statement Pixel Format - %d\n", (pix_fmt));
+        // printf("Error in if statement Descriptor - %p\n", (desc));
+        // printf("Error in if statement Flags - %d\n", (AV_PIX_FMT_FLAG_HWACCEL));
 
         // return AVERROR(EINVAL);
         return 0;

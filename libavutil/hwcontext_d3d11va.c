@@ -335,7 +335,7 @@ static int d3d11va_frames_init(AVHWFramesContext *ctx)
 static int d3d11va_get_buffer(AVHWFramesContext *ctx, AVFrame *frame)
 {
     AVD3D11FrameDescriptor *desc;
-
+    av_log(ctx, AV_LOG_DEBUG, "Get buffer ===========================\n");
     frame->buf[0] = av_buffer_pool_get(ctx->pool);
     if (!frame->buf[0])
         return AVERROR(ENOMEM);

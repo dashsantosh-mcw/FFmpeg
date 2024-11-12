@@ -1250,14 +1250,12 @@ int fg_create(FilterGraph **pfg, char *graph_desc, Scheduler *sch)
     ret = graph_parse(fg, graph, fgp->graph_desc, &inputs, &outputs,
                       hw_device_for_filter());
     if (ret < 0) {
-        printf("Error in graph_parse: %d\n", ret);
+        // printf("Error in graph_parse: %d\n", ret);
         goto fail;
     }
 
     // Debug prints for inputs, outputs, and filters after graph_parse
-    printf("Number of filters in graph: %d\n", graph->nb_filters);
-    printf("Number of inputs: %d\n", fg->nb_inputs);
-    printf("Number of outputs: %d\n", fg->nb_outputs);
+   
 
     for (unsigned i = 0; i < graph->nb_filters; i++) {
         const AVFilter *f = graph->filters[i]->filter;
@@ -1326,7 +1324,9 @@ int fg_create(FilterGraph **pfg, char *graph_desc, Scheduler *sch)
         ret = AVERROR(ENOSYS);
         goto fail;
     }
-
+    printf("Number of filters in graph: %d\n", graph->nb_filters);
+    printf("Number of inputs: %d\n", fg->nb_inputs);
+    printf("Number of outputs: %d\n", fg->nb_outputs);
     ret = sch_add_filtergraph(sch, fg->nb_inputs, fg->nb_outputs,
                               filter_thread, fgp);
     if (ret < 0)
@@ -2602,8 +2602,8 @@ static int fg_output_frame(OutputFilterPriv *ofp, FilterGraphThread *fgt,
             frame_out = fgp->frame_enc;
             ret = av_frame_ref(frame_out, frame_in);
             if (ret < 0) {
-                av_log(ofp, AV_LOG_ERROR,
-                       "Error in av_frame_ref: %s\n", av_err2str(ret));
+                // av_log(ofp, AV_LOG_ERROR,
+                //        "Error in av_frame_ref: %s\n", av_err2str(ret));
                 return ret;
             }
 
@@ -2682,9 +2682,9 @@ static int fg_output_step(OutputFilterPriv *ofp, FilterGraphThread *fgt,
     } else if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
         return 1;
     } else if (ret < 0) {
-        av_log(ofp, AV_LOG_WARNING,
-               "Error in retrieving a frame from the filtergraph: %s\n",
-               av_err2str(ret));
+        // av_log(ofp, AV_LOG_WARNING,
+        //        "Error in retrieving a frame from the filtergraph: %s\n",
+        //        av_err2str(ret));
         return ret;
     }
 
@@ -2799,8 +2799,8 @@ static int read_frames(FilterGraph *fg, FilterGraphThread *fgt,
             while (!ret) {
                 ret = fg_output_step(ofp, fgt, frame);
                 if (ret < 0) {
-                    av_log(fg, AV_LOG_ERROR, "Error reading frame: %s\n",
-                           av_err2str(ret));
+                    // av_log(fg, AV_LOG_ERROR, "Error reading frame: %s\n",
+                    //        av_err2str(ret));
                     return ret;
                 }
             }

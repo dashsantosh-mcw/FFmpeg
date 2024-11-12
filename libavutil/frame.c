@@ -195,10 +195,7 @@ static int get_video_buffer(AVFrame *frame, int align)
             ret = av_image_fill_linesizes(frame->linesize, frame->format,
                                           FFALIGN(frame->width, i));
             if (ret < 0)
-            {
-                    av_log(frame, AV_LOG_ERROR,
-                       "Error in av_image_fill_linesizes function call ret value is %d and frame format is %d\n",ret, frame->format);
-            }
+                return ret;
             if (!(frame->linesize[0] & (align-1)))
                 break;
         }
@@ -213,10 +210,7 @@ static int get_video_buffer(AVFrame *frame, int align)
     padded_height = FFALIGN(frame->height, 32);
     if ((ret = av_image_fill_plane_sizes(sizes, frame->format,
                                          padded_height, linesizes)) < 0)
-                                         {av_log(frame, AV_LOG_ERROR,
-                       "Error in av_image_fill_plane_sizes function call ret value is %d and frame format is %d\n",ret, frame->format);
         return ret;
-}
 
     total_size = 4*plane_padding;
     for (int i = 0; i < 4; i++) {
@@ -418,24 +412,17 @@ int av_frame_ref(AVFrame *dst, const AVFrame *src)
 
     ret = frame_copy_props(dst, src, 0);
     if (ret < 0)
-    {    av_log(dst, AV_LOG_ERROR,
-                       "Error in frame_copy_props ret value: %s\n", av_err2str(ret));
         goto fail;
-    }
 
     ret = av_channel_layout_copy(&dst->ch_layout, &src->ch_layout);
 
     if (ret < 0)
-    {
-        av_log(dst, AV_LOG_ERROR,
-                       "Error in av_channel_layout_copy ret value: %s\n", av_err2str(ret));
-                       goto fail;
-    }
+        goto fail;
         
 
     /* duplicate the frame data if it's not refcounted */
-    av_log(dst, AV_LOG_ERROR,
-                       "Printing src->buf value: %s\n", src->buf);
+    // av_log(dst, AV_LOG_ERROR,
+    //                    "Printing src->buf value: %s\n", src->buf[0]);
     if (!src->buf[0]) {
         ret = av_frame_get_buffer(dst, 0);
         if (ret < 0)
