@@ -179,10 +179,10 @@ static int d3d11scale_configure_processor(D3D11ScaleContext* s, AVFilterContext*
     opTexDesc.Format = DXGI_FORMAT_NV12;
     opTexDesc.SampleDesc.Count = 1;
     opTexDesc.Usage = D3D11_USAGE_DEFAULT;
-    opTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-    //  | D3D11_BIND_VIDEO_ENCODER;
+    opTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_VIDEO_ENCODER;
     opTexDesc.MiscFlags = 0;
 
+    av_log(ctx, AV_LOG_VERBOSE, "Changed the BINDFLAGS for OUTPUT TEXTURE\n", hr);
     hr = s->device->lpVtbl->CreateTexture2D(s->device, &opTexDesc, NULL, &s->d3d11_vp_output_texture);
         if (FAILED(hr)) {
         av_log(ctx, AV_LOG_ERROR, "Failed to create Texture2D : HRESULT 0x%lX\n", hr);
@@ -244,7 +244,7 @@ static int d3d11scale_filter_frame(AVFilterLink* inlink, AVFrame* in) {
     ID3D11VideoProcessorInputView* inputView = NULL;
 
     D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {};
-    inputViewDesc.FourCC = DXGI_FORMAT_NV12;
+    // inputViewDesc.FourCC = DXGI_FORMAT_NV12;
     inputViewDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
     inputViewDesc.Texture2D.ArraySlice = subIdx;
     inputViewDesc.Texture2D.MipSlice = 0;
@@ -275,46 +275,48 @@ static int d3d11scale_filter_frame(AVFilterLink* inlink, AVFrame* in) {
     }
 
     // Code to write the frame
-    // D3D11_TEXTURE2D_DESC stagingDesc = { 0 };
-    // stagingDesc.Width = s->width;
-    // stagingDesc.Height = s->height;
-    // stagingDesc.MipLevels = 1;
-    // stagingDesc.ArraySize = 1;
-    // stagingDesc.Format = DXGI_FORMAT_NV12; 
-    // stagingDesc.SampleDesc.Count = 1;
-    // stagingDesc.Usage = D3D11_USAGE_STAGING;
-    // stagingDesc.BindFlags = 0;
-    // stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    D3D11_TEXTURE2D_DESC stagingDesc = { 0 };
+    stagingDesc.Width = s->width;
+    stagingDesc.Height = s->height;
+    stagingDesc.MipLevels = 1;
+    stagingDesc.ArraySize = 1;
+    stagingDesc.Format = DXGI_FORMAT_NV12; 
+    stagingDesc.SampleDesc.Count = 1;
+    stagingDesc.Usage = D3D11_USAGE_STAGING;
+    stagingDesc.BindFlags = 0;
+    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 
-    // ID3D11Texture2D *stagingTexture = NULL;
-    // hr = s->device->lpVtbl->CreateTexture2D(s->device, &stagingDesc, NULL, &stagingTexture);
-    // if (FAILED(hr)) {
-    //     av_log(ctx, AV_LOG_ERROR, "Failed to create staging texture\n");
-    //     return AVERROR_EXTERNAL;
-    // }
+    ID3D11Texture2D *stagingTexture = NULL;
+    hr = s->device->lpVtbl->CreateTexture2D(s->device, &stagingDesc, NULL, &stagingTexture);
+    if (FAILED(hr)) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to create staging texture\n");
+        return AVERROR_EXTERNAL;
+    }
 
     // // Copy resource
-    // s->context->lpVtbl->CopyResource(s->context, stagingTexture, s->d3d11_vp_output_texture);
+    s->context->lpVtbl->CopyResource(s->context, stagingTexture, s->d3d11_vp_output_texture);
 
-    // D3D11_MAPPED_SUBRESOURCE mappedResource;
-    // hr = s->context->lpVtbl->Map(s->context, stagingTexture, 0, D3D11_MAP_READ, 0, &mappedResource);
-    // // if (SUCCEEDED(hr)) {
-    // //     // Analyze data to confirm non-black values
-    // //     uint8_t *data = (uint8_t *)mappedResource.pData;
-    // //     int nonZeroPixelCount = 0;
-    // //     for (int y = 0; y < s->height; y++) {
-    // //         for (int x = 0; x < mappedResource.RowPitch; x++) {
-    // //             if (data[y * mappedResource.RowPitch + x] != 0) {
-    // //                 nonZeroPixelCount++;
-    // //                 break;
-    // //             }
-    // //         }
-    // //     }
-    // //     av_log(ctx, AV_LOG_VERBOSE, "Non-zero pixels in the frame: %d\n", nonZeroPixelCount);
+    D3D11_MAPPED_SUBRESOURCE mappedResource;
+    hr = s->context->lpVtbl->Map(s->context, stagingTexture, 0, D3D11_MAP_READ, 0, &mappedResource);
+    if (SUCCEEDED(hr)) {
+        // Analyze data to confirm non-black values
+        uint8_t *data = (uint8_t *)mappedResource.pData;
+        int nonZeroPixelCount = 0;
+        for (int y = 0; y < s->height; y++) {
+            for (int x = 0; x < mappedResource.RowPitch; x++) {
+                if (data[y * mappedResource.RowPitch + x] != 0) {
+                    nonZeroPixelCount++;
+                    break;
+                }
+            }
+        }
+        av_log(ctx, AV_LOG_VERBOSE, "Non-zero pixels in the frame: %d\n", nonZeroPixelCount);
 
-    // //     s->context->lpVtbl->Unmap(s->context, stagingTexture, 0);
-    // // }
-
+        s->context->lpVtbl->Unmap(s->context, stagingTexture, 0);
+    }
+    else {
+    av_log(ctx, AV_LOG_ERROR, "Failed to map the output texture for inspection.\n");
+    }
 
     // // Access the data and write it to a file
     // // mappedResource.pData points to the pixel data
@@ -369,17 +371,6 @@ av_log(ctx, AV_LOG_VERBOSE, "Before hwframe top Buffer function!!!!!!!!\n");
     out->width = s->width;
     out->height = s->height;
     out->format = AV_PIX_FMT_D3D11;
-
-    // AVFrame *src = in;
-
-    // src = s->frame;
-    av_log(ctx, AV_LOG_VERBOSE, "Before hwframe Buffer function!!!!!!!!\n");
-    // ret = av_hwframe_get_buffer(ctx->hw_device_ctx, s->tmp_frame, 0);
-    // if (ret < 0)
-    //     av_log(ctx, AV_LOG_VERBOSE, "After hwframe Buffer function!!!!!!!!\n failed - returned %d\n", ret);
-    //     return ret;
-    av_log(ctx, AV_LOG_VERBOSE, "After hwframe Buffer function!!!!!!!!\n");
-
 
     av_log(ctx, AV_LOG_VERBOSE, "Input dimensions: %dx%d\n", s->inputWidth, s->inputHeight);
     av_log(ctx, AV_LOG_VERBOSE, "Output dimensions: %dx%d\n", s->width, s->height);
