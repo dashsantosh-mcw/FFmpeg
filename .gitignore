@@ -26,6 +26,9 @@
 *.ptx.c
 *.ptx.gz
 *_g
+*.mp4
+*.txt
+*.raw
 \#*
 .\#*
 /.config
