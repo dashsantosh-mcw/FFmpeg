@@ -340,25 +340,25 @@ AVHWFramesContext* frames_ctx = (AVHWFramesContext*)frame->hw_frames_ctx->data;
 
 
     //The code below works fine, have to figure out a way to use it in mf_init_encoder, but nevertheless, the sync-mft doesn't work for more frames.
-    av_log(avctx, AV_LOG_VERBOSE, "create device manager... \n");
-    hr = func->MFCreateDXGIDeviceManager(&c->resetToken, &c->dxgiManager);
-        av_log(avctx, AV_LOG_VERBOSE, "after creation hr = %lx \n", hr);
-        if (SUCCEEDED(hr)) {
-            av_log(avctx, AV_LOG_VERBOSE, "reseting device");
-            hr = IMFDXGIDeviceManager_ResetDevice(c->dxgiManager, device_hwctx->device, c->resetToken);
-            av_log(avctx, AV_LOG_VERBOSE, "after resetting hr = %lx \n", hr);
+    // av_log(avctx, AV_LOG_VERBOSE, "create device manager... \n");
+    // hr = func->MFCreateDXGIDeviceManager(&c->resetToken, &c->dxgiManager);
+    //     av_log(avctx, AV_LOG_VERBOSE, "after creation hr = %lx \n", hr);
+    //     if (SUCCEEDED(hr)) {
+    //         av_log(avctx, AV_LOG_VERBOSE, "reseting device");
+    //         hr = IMFDXGIDeviceManager_ResetDevice(c->dxgiManager, device_hwctx->device, c->resetToken);
+    //         av_log(avctx, AV_LOG_VERBOSE, "after resetting hr = %lx \n", hr);
 
-            if (SUCCEEDED(hr)) {
-                av_log(avctx, AV_LOG_VERBOSE, "reset device manager hr %lx\n", hr);
-            }
-            av_log(avctx, AV_LOG_VERBOSE, "creating manager done...");
-        }
-        hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)c->dxgiManager);
-    if (FAILED(hr)){
-        av_log(avctx, AV_LOG_ERROR, "failed to set manager: %s\n", ff_hr_str(hr));
-    } else {
-        av_log(avctx, AV_LOG_VERBOSE, "d3d manager set\n");
-    }
+    //         if (SUCCEEDED(hr)) {
+    //             av_log(avctx, AV_LOG_VERBOSE, "reset device manager hr %lx\n", hr);
+    //         }
+    //         av_log(avctx, AV_LOG_VERBOSE, "creating manager done...");
+    //     }
+    //     hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)c->dxgiManager);
+    // if (FAILED(hr)){
+    //     av_log(avctx, AV_LOG_ERROR, "failed to set manager: %s\n", ff_hr_str(hr));
+    // } else {
+    //     av_log(avctx, AV_LOG_VERBOSE, "d3d manager set\n");
+//    }
     }
 
     av_log(avctx, AV_LOG_VERBOSE, "INSIDE mf_v_avframe_to_sample\n");
