@@ -333,7 +333,7 @@ static IMFSample *mf_v_avframe_to_sample(AVCodecContext *avctx, const AVFrame *f
     int size;
  
     MFFunctions *func = &c->functions;
-AVHWFramesContext* frames_ctx = (AVHWFramesContext*)frame->hw_frames_ctx->data; 
+    AVHWFramesContext* frames_ctx = (AVHWFramesContext*)frame->hw_frames_ctx->data; 
     AVD3D11VADeviceContext* device_hwctx = (AVD3D11VADeviceContext*)frames_ctx->device_ctx->hwctx;
     if(!c->hw_frames_ctx ) {
     c->hw_frames_ctx = frames_ctx;
@@ -371,64 +371,64 @@ AVHWFramesContext* frames_ctx = (AVHWFramesContext*)frame->hw_frames_ctx->data;
      
     av_log(avctx, AV_LOG_VERBOSE, "frame width %d, frame height %d\n", frame->width, frame->height);
     // Create staging texture to access the frame data on CPU
-    D3D11_TEXTURE2D_DESC stagingDesc = { 0 };
-    stagingDesc.Width = frame->width;
-    stagingDesc.Height = frame->height;
-    stagingDesc.MipLevels = 1;
-    stagingDesc.ArraySize = 1;
-    stagingDesc.Format = DXGI_FORMAT_NV12;  // Match the format of d3d11_texture
-    stagingDesc.SampleDesc.Count = 1;
-    stagingDesc.Usage = D3D11_USAGE_STAGING;
-    stagingDesc.BindFlags = 0;
-    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-    av_log(avctx, AV_LOG_VERBOSE, "Before creating texture in mf_v_avframe_to_sample\n");
-    ID3D11Texture2D *stagingTexture = NULL;
-    hr = device_hwctx->device->lpVtbl->CreateTexture2D(device_hwctx->device, &stagingDesc, NULL, &stagingTexture);
-    if (FAILED(hr)) {
-        av_log(avctx, AV_LOG_ERROR, "Failed to create staging texture: HRESULT 0x%lX\n", hr);
-        return NULL;
-    }
-    av_log(avctx, AV_LOG_VERBOSE, "After creating texture in mf_v_avframe_to_sample\n");
+    // D3D11_TEXTURE2D_DESC stagingDesc = { 0 };
+    // stagingDesc.Width = frame->width;
+    // stagingDesc.Height = frame->height;
+    // stagingDesc.MipLevels = 1;
+    // stagingDesc.ArraySize = 1;
+    // stagingDesc.Format = DXGI_FORMAT_NV12;  // Match the format of d3d11_texture
+    // stagingDesc.SampleDesc.Count = 1;
+    // stagingDesc.Usage = D3D11_USAGE_STAGING;
+    // stagingDesc.BindFlags = 0;
+    // stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    // av_log(avctx, AV_LOG_VERBOSE, "Before creating texture in mf_v_avframe_to_sample\n");
+    // ID3D11Texture2D *stagingTexture = NULL;
+    // hr = device_hwctx->device->lpVtbl->CreateTexture2D(device_hwctx->device, &stagingDesc, NULL, &stagingTexture);
+    // if (FAILED(hr)) {
+    //     av_log(avctx, AV_LOG_ERROR, "Failed to create staging texture: HRESULT 0x%lX\n", hr);
+    //     return NULL;
+    // }
+    // av_log(avctx, AV_LOG_VERBOSE, "After creating texture in mf_v_avframe_to_sample\n");
 
-    // Copy resource data from d3d11_texture to stagingTexture
-    device_hwctx->device_context->lpVtbl->CopyResource(device_hwctx->device_context, (ID3D11Resource*)stagingTexture, (ID3D11Resource*)d3d11_texture);
+    // // Copy resource data from d3d11_texture to stagingTexture
+    // device_hwctx->device_context->lpVtbl->CopyResource(device_hwctx->device_context, (ID3D11Resource*)stagingTexture, (ID3D11Resource*)d3d11_texture);
 
-    // Map the staging texture to read data
-    D3D11_MAPPED_SUBRESOURCE mappedResource;
-    hr = device_hwctx->device_context->lpVtbl->Map(device_hwctx->device_context, (ID3D11Resource*)stagingTexture, 0, D3D11_MAP_READ, 0, &mappedResource);
-    if (SUCCEEDED(hr)) {
-        // Analyze data for non-zero pixel values as a test
-        uint8_t *data = (uint8_t *)mappedResource.pData;
-        int nonZeroPixelCount = 0;
-        for (int y = 0; y < frame->height; y++) {
-            for (int x = 0; x < mappedResource.RowPitch; x++) {
-                if (data[y * mappedResource.RowPitch + x] != 0) {
-                    nonZeroPixelCount++;
-                    break;
-                }
-            }
-        }
-        av_log(avctx, AV_LOG_VERBOSE, "Non-zero pixels in the frame: %d\n", nonZeroPixelCount);
+    // // Map the staging texture to read data
+    // D3D11_MAPPED_SUBRESOURCE mappedResource;
+    // hr = device_hwctx->device_context->lpVtbl->Map(device_hwctx->device_context, (ID3D11Resource*)stagingTexture, 0, D3D11_MAP_READ, 0, &mappedResource);
+    // if (SUCCEEDED(hr)) {
+    //     // Analyze data for non-zero pixel values as a test
+    //     uint8_t *data = (uint8_t *)mappedResource.pData;
+    //     int nonZeroPixelCount = 0;
+    //     for (int y = 0; y < frame->height; y++) {
+    //         for (int x = 0; x < mappedResource.RowPitch; x++) {
+    //             if (data[y * mappedResource.RowPitch + x] != 0) {
+    //                 nonZeroPixelCount++;
+    //                 break;
+    //             }
+    //         }
+    //     }
+    //     av_log(avctx, AV_LOG_VERBOSE, "Non-zero pixels in the frame: %d\n", nonZeroPixelCount);
 
-        // Optionally write the frame to a file for inspection
-        FILE *file = fopen("output_frame.raw", "wb");
-        if (file) {
-            for (int y = 0; y < frame->height; y++) {
-                fwrite(data + y * mappedResource.RowPitch, 1, desc.Width, file);
-            }
-            fclose(file);
-        } else {
-            av_log(avctx, AV_LOG_ERROR, "Failed to open output_frame.raw\n");
-        }
+    //     // Optionally write the frame to a file for inspection
+    //     FILE *file = fopen("output_frame.raw", "wb");
+    //     if (file) {
+    //         for (int y = 0; y < frame->height; y++) {
+    //             fwrite(data + y * mappedResource.RowPitch, 1, desc.Width, file);
+    //         }
+    //         fclose(file);
+    //     } else {
+    //         av_log(avctx, AV_LOG_ERROR, "Failed to open output_frame.raw\n");
+    //     }
 
-        // Unmap and release resources
-        device_hwctx->device_context->lpVtbl->Unmap(device_hwctx->device_context, (ID3D11Resource*)stagingTexture, 0);
-    } else {
-        av_log(avctx, AV_LOG_ERROR, "Failed to map the output texture for inspection: HRESULT 0x%lX\n", hr);
-    }
+    //     // Unmap and release resources
+    //     device_hwctx->device_context->lpVtbl->Unmap(device_hwctx->device_context, (ID3D11Resource*)stagingTexture, 0);
+    // } else {
+    //     av_log(avctx, AV_LOG_ERROR, "Failed to map the output texture for inspection: HRESULT 0x%lX\n", hr);
+    // }
 
-    // Release the staging texture after use
-    stagingTexture->lpVtbl->Release(stagingTexture);
+    // // Release the staging texture after use
+    // stagingTexture->lpVtbl->Release(stagingTexture);
 
         
         av_log(avctx, AV_LOG_VERBOSE , "Inside the mf_v_avframe_to_sample - ifframe format D3D11\n");
@@ -484,7 +484,7 @@ AVHWFramesContext* frames_ctx = (AVHWFramesContext*)frame->hw_frames_ctx->data;
 
         hr = IMFMediaBuffer_Release(buffer);
         av_log(avctx, AV_LOG_VERBOSE, "release buffer hr %s\n", ff_hr_str(hr));
-        printf("Buffer reference count before release: %lu\n", refCountBeforeRelease);
+        // printf("Buffer reference count before release: %lu\n", refCountBeforeRelease);
         if (buffer) {
         IMFMediaBuffer_Release(buffer);
         buffer = NULL; // Avoid accidental access
@@ -579,7 +579,7 @@ static int mf_send_sample(AVCodecContext *avctx, IMFSample *sample)
             av_log(avctx, AV_LOG_ERROR, "failed processing input: %s\n", ff_hr_str(hr));
             return AVERROR_EXTERNAL;
         }
-        av_log(avctx, AV_LOG_ERROR , "processInput hr %lx\n", hr);
+        av_log(avctx, AV_LOG_WARNING , "processInput hr %lx\n", hr);
         c->async_need_input = 0;
     } else if (!c->draining) {
         hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_COMMAND_DRAIN, 0);
@@ -635,7 +635,7 @@ static int mf_receive_sample(AVCodecContext *avctx, IMFSample **out_sample)
         av_log(avctx, AV_LOG_VERBOSE, "Before MFTransform_ProcessOutput call \n");
         st = 0;
         hr = IMFTransform_ProcessOutput(c->mft, 0, 1, &out_buffers, &st);
-        av_log(avctx, AV_LOG_ERROR, "After MFTransform_ProcessOutput, hr = %s\n", ff_hr_str(hr));
+        av_log(avctx, AV_LOG_WARNING, "After MFTransform_ProcessOutput, hr = %s\n", ff_hr_str(hr));
 
         if (out_buffers.pEvents)
             IMFCollection_Release(out_buffers.pEvents);
