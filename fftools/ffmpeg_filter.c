@@ -2637,8 +2637,6 @@ static int fg_output_frame(OutputFilterPriv *ofp, FilterGraphThread *fgt,
                 fgt->eof_out[ofp->index] = 1;
                 fgp->nb_outputs_done++;
             }
-            av_log(ofp, AV_LOG_ERROR,
-                   "Error in sch_filter_send: %s\n", av_err2str(ret));
             return ret == AVERROR_EOF ? 0 : ret;
         }
 
@@ -2659,7 +2657,7 @@ static int fg_output_frame(OutputFilterPriv *ofp, FilterGraphThread *fgt,
     }
 
     if (!frame) {
-        av_log(ofp, AV_LOG_ERROR, "No frame\n");
+        // av_log(ofp, AV_LOG_ERROR, "No frame\n");
         return close_output(ofp, fgt);
     }
 

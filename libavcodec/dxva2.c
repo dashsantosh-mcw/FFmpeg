@@ -631,7 +631,7 @@ int ff_dxva2_common_frame_params(AVCodecContext *avctx,
                             AV_PIX_FMT_P010 : AV_PIX_FMT_NV12;
     frames_ctx->width = FFALIGN(avctx->coded_width, surface_alignment);
     frames_ctx->height = FFALIGN(avctx->coded_height, surface_alignment);
-    frames_ctx->initial_pool_size = num_surfaces;
+    frames_ctx->initial_pool_size = 20;
 
 
 #if CONFIG_DXVA2
@@ -647,6 +647,7 @@ int ff_dxva2_common_frame_params(AVCodecContext *avctx,
         AVD3D11VAFramesContext *frames_hwctx = frames_ctx->hwctx;
 
         frames_hwctx->BindFlags |= D3D11_BIND_DECODER;
+        frames_hwctx->BindFlags |= D3D11_BIND_VIDEO_ENCODER;
     }
 #endif
 

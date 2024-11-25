@@ -94,7 +94,6 @@ int av_image_fill_linesizes(int linesizes[4], enum AVPixelFormat pix_fmt, int wi
     int max_step_comp[4];       /* the component for each plane which has the max pixel step */
 
     memset(linesizes, 0, 4*sizeof(linesizes[0]));
-    printf("Error in if statement Descriptor Flags - %llu\n", (desc->flags));
     if (!desc || desc->flags & AV_PIX_FMT_FLAG_HWACCEL)
     {
     if (!desc) {

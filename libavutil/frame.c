@@ -310,8 +310,6 @@ int av_frame_get_buffer(AVFrame *frame, int align)
 
     if (frame->width > 0 && frame->height > 0)
     {
-        av_log(frame, AV_LOG_ERROR,
-                       "Error in function call - get_video_buffer - %d\n", get_video_buffer(frame, align));
         return get_video_buffer(frame, align);
 }
     else if (frame->nb_samples > 0 &&
@@ -434,8 +432,6 @@ int av_frame_ref(AVFrame *dst, const AVFrame *src)
         
 
     /* duplicate the frame data if it's not refcounted */
-    av_log(dst, AV_LOG_ERROR,
-                       "Printing src->buf value: %s\n", src->buf);
     if (!src->buf[0]) {
         ret = av_frame_get_buffer(dst, 0);
         if (ret < 0)
