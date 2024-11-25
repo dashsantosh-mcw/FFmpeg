@@ -333,121 +333,77 @@ static IMFSample *mf_v_avframe_to_sample(AVCodecContext *avctx, const AVFrame *f
     int size;
  
     MFFunctions *func = &c->functions;
-AVHWFramesContext* frames_ctx = (AVHWFramesContext*)frame->hw_frames_ctx->data; 
-    AVD3D11VADeviceContext* device_hwctx = (AVD3D11VADeviceContext*)frames_ctx->device_ctx->hwctx;
-    if(!c->hw_frames_ctx ) {
-    c->hw_frames_ctx = frames_ctx;
-
+    AVHWFramesContext* frames_ctx = NULL; 
+    AVD3D11VADeviceContext* device_hwctx = NULL;
 
     //The code below works fine, have to figure out a way to use it in mf_init_encoder, but nevertheless, the sync-mft doesn't work for more frames.
-    av_log(avctx, AV_LOG_VERBOSE, "create device manager... \n");
-    hr = func->MFCreateDXGIDeviceManager(&c->resetToken, &c->dxgiManager);
-        av_log(avctx, AV_LOG_VERBOSE, "after creation hr = %lx \n", hr);
-        if (SUCCEEDED(hr)) {
-            av_log(avctx, AV_LOG_VERBOSE, "reseting device");
-            hr = IMFDXGIDeviceManager_ResetDevice(c->dxgiManager, device_hwctx->device, c->resetToken);
-            av_log(avctx, AV_LOG_VERBOSE, "after resetting hr = %lx \n", hr);
+    
 
-            if (SUCCEEDED(hr)) {
-                av_log(avctx, AV_LOG_VERBOSE, "reset device manager hr %lx\n", hr);
-            }
-            av_log(avctx, AV_LOG_VERBOSE, "creating manager done...");
-        }
-        hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)c->dxgiManager);
-    if (FAILED(hr)){
-        av_log(avctx, AV_LOG_ERROR, "failed to set manager: %s\n", ff_hr_str(hr));
-    } else {
-        av_log(avctx, AV_LOG_VERBOSE, "d3d manager set\n");
-    }
-    }
+    // av_log(avctx, AV_LOG_VERBOSE, "INSIDE mf_v_avframe_to_sample\n");
+    // av_log(avctx, AV_LOG_VERBOSE, "frame format %s\n", av_get_pix_fmt_name(frame->format));
 
-    av_log(avctx, AV_LOG_VERBOSE, "INSIDE mf_v_avframe_to_sample\n");
-    av_log(avctx, AV_LOG_VERBOSE, "frame format %s\n", av_get_pix_fmt_name(frame->format));
     if (frame->format == AV_PIX_FMT_D3D11) {
-        
+    frames_ctx = (AVHWFramesContext*)frame->hw_frames_ctx->data; 
+    device_hwctx = (AVD3D11VADeviceContext*)frames_ctx->device_ctx->hwctx;
+    av_log(avctx, AV_LOG_WARNING, "Enocder Device: %p, Encoder Device Context: %p, Encoder Video Device: %p, Encoder Video Context: %p, Frames Context: %p\n", 
+    device_hwctx->device, device_hwctx->device_context, device_hwctx->video_device, device_hwctx->video_context, frames_ctx);
+
+
+    // av_log(avctx, AV_LOG_VERBOSE, "create device manager... \n");
+    // hr = func->MFCreateDXGIDeviceManager(&c->resetToken, &c->dxgiManager);
+    //     av_log(avctx, AV_LOG_VERBOSE, "after creation hr = %lx \n", hr);
+    //     if (SUCCEEDED(hr)) {
+    //         av_log(avctx, AV_LOG_VERBOSE, "reseting device");
+    //         hr = IMFDXGIDeviceManager_ResetDevice(c->dxgiManager, device_hwctx->device, c->resetToken);
+    //         av_log(avctx, AV_LOG_VERBOSE, "after resetting hr = %lx \n", hr);
+
+    //         if (SUCCEEDED(hr)) {
+    //             av_log(avctx, AV_LOG_VERBOSE, "reset device manager hr %lx\n", hr);
+    //         }
+    //         av_log(avctx, AV_LOG_VERBOSE, "creating manager done...");
+    //     }
+    //     hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)c->dxgiManager);
+    // if (FAILED(hr)){
+    //     av_log(avctx, AV_LOG_ERROR, "failed to set manager: %s\n", ff_hr_str(hr));
+    // } else {
+    //     av_log(avctx, AV_LOG_VERBOSE, "d3d manager set\n");
+    // }
+
+    device_hwctx->lock(device_hwctx->lock_ctx); // Locking hardware context
         d3d11_texture = (ID3D11Texture2D *)frame->data[0];
         subIdx = (int)(intptr_t)frame->data[1];
     // Existing code for D3D11 texture handling
      
     av_log(avctx, AV_LOG_VERBOSE, "frame width %d, frame height %d\n", frame->width, frame->height);
     // Create staging texture to access the frame data on CPU
-    D3D11_TEXTURE2D_DESC stagingDesc = { 0 };
-    stagingDesc.Width = frame->width;
-    stagingDesc.Height = frame->height;
-    stagingDesc.MipLevels = 1;
-    stagingDesc.ArraySize = 1;
-    stagingDesc.Format = DXGI_FORMAT_NV12;  // Match the format of d3d11_texture
-    stagingDesc.SampleDesc.Count = 1;
-    stagingDesc.Usage = D3D11_USAGE_STAGING;
-    stagingDesc.BindFlags = 0;
-    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-    av_log(avctx, AV_LOG_VERBOSE, "Before creating texture in mf_v_avframe_to_sample\n");
-    ID3D11Texture2D *stagingTexture = NULL;
-    hr = device_hwctx->device->lpVtbl->CreateTexture2D(device_hwctx->device, &stagingDesc, NULL, &stagingTexture);
-    if (FAILED(hr)) {
-        av_log(avctx, AV_LOG_ERROR, "Failed to create staging texture: HRESULT 0x%lX\n", hr);
-        return NULL;
-    }
-    av_log(avctx, AV_LOG_VERBOSE, "After creating texture in mf_v_avframe_to_sample\n");
-
-    // Copy resource data from d3d11_texture to stagingTexture
-    device_hwctx->device_context->lpVtbl->CopyResource(device_hwctx->device_context, (ID3D11Resource*)stagingTexture, (ID3D11Resource*)d3d11_texture);
-
-    // Map the staging texture to read data
-    D3D11_MAPPED_SUBRESOURCE mappedResource;
-    hr = device_hwctx->device_context->lpVtbl->Map(device_hwctx->device_context, (ID3D11Resource*)stagingTexture, 0, D3D11_MAP_READ, 0, &mappedResource);
-    if (SUCCEEDED(hr)) {
-        // Analyze data for non-zero pixel values as a test
-        uint8_t *data = (uint8_t *)mappedResource.pData;
-        int nonZeroPixelCount = 0;
-        for (int y = 0; y < frame->height; y++) {
-            for (int x = 0; x < mappedResource.RowPitch; x++) {
-                if (data[y * mappedResource.RowPitch + x] != 0) {
-                    nonZeroPixelCount++;
-                    break;
-                }
-            }
-        }
-        av_log(avctx, AV_LOG_VERBOSE, "Non-zero pixels in the frame: %d\n", nonZeroPixelCount);
-
-        // Optionally write the frame to a file for inspection
-        FILE *file = fopen("output_frame.raw", "wb");
-        if (file) {
-            for (int y = 0; y < frame->height; y++) {
-                fwrite(data + y * mappedResource.RowPitch, 1, desc.Width, file);
-            }
-            fclose(file);
-        } else {
-            av_log(avctx, AV_LOG_ERROR, "Failed to open output_frame.raw\n");
-        }
-
-        // Unmap and release resources
-        device_hwctx->device_context->lpVtbl->Unmap(device_hwctx->device_context, (ID3D11Resource*)stagingTexture, 0);
-    } else {
-        av_log(avctx, AV_LOG_ERROR, "Failed to map the output texture for inspection: HRESULT 0x%lX\n", hr);
-    }
-
-    // Release the staging texture after use
-    stagingTexture->lpVtbl->Release(stagingTexture);
-
-        
-        av_log(avctx, AV_LOG_VERBOSE , "Inside the mf_v_avframe_to_sample - ifframe format D3D11\n");
-        // ID3D11Texture2D* d3d11_texture = ((AVD3D11FrameDescriptor*)frame->buf[0]->data)->texture;
-
-
-        d3d11_texture->lpVtbl->GetDesc(d3d11_texture, &desc);
-        av_log(avctx, AV_LOG_VERBOSE, "After GET Desc texture %p\n", d3d11_texture);
-        av_log(avctx, AV_LOG_VERBOSE, "Frame properties: width=%d, height=%d, format=%s\n",
-            frame->width, frame->height, av_get_pix_fmt_name(frame->format));
-        // av_log(avctx, AV_LOG_VERBOSE, "DXGI texture format: %d\n", desc.Format);
-        av_log(avctx, AV_LOG_VERBOSE, "Desc: width %d height %d MipLevels %d ArraySize %d subIdx %d format %d\n", desc.Width, desc.Height, desc.MipLevels, desc.ArraySize, subIdx, desc.Format);
-
-       
+    // D3D11_TEXTURE2D_DESC stagingDesc = { 0 };
+    // stagingDesc.Width = frame->width;
+    // stagingDesc.Height = frame->height;
+    // stagingDesc.MipLevels = 1;
+    // stagingDesc.ArraySize = 1;
+    // stagingDesc.Format = DXGI_FORMAT_NV12;  // Match the format of d3d11_texture
+    // stagingDesc.SampleDesc.Count = 1;
+    // stagingDesc.Usage = D3D11_USAGE_STAGING;
+    // stagingDesc.BindFlags = 0;
+    // stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    // av_log(avctx, AV_LOG_VERBOSE, "Before creating texture in mf_v_avframe_to_sample\n");
+    // ID3D11Texture2D *stagingTexture = NULL;
+    // hr = device_hwctx->device->lpVtbl->CreateTexture2D(device_hwctx->device, &stagingDesc, NULL, &stagingTexture);
+    // if (FAILED(hr)) {
+    //     av_log(avctx, AV_LOG_ERROR, "Failed to create staging texture: HRESULT 0x%lX\n", hr);
+    //     return NULL;
+    // }
+    // av_log(avctx, AV_LOG_VERBOSE, "After creating texture in mf_v_avframe_to_sample\n");
         if (!d3d11_texture)
         {
             av_log(avctx, AV_LOG_ERROR, "texture not found \n");
             return NULL;
         }
+        d3d11_texture->lpVtbl->GetDesc(d3d11_texture, &desc);
+        av_log(avctx, AV_LOG_VERBOSE, "After GET Desc texture %p\n", d3d11_texture);
+        av_log(avctx, AV_LOG_VERBOSE, "Frame properties: width=%d, height=%d, format=%s\n",
+            frame->width, frame->height, av_get_pix_fmt_name(frame->format));
+        av_log(avctx, AV_LOG_VERBOSE, "Desc: width %d height %d MipLevels %d ArraySize %d subIdx %d format %d\n", desc.Width, desc.Height, desc.MipLevels, desc.ArraySize, subIdx, desc.Format);
         av_log(avctx, AV_LOG_VERBOSE, "creating sample...\n");
         hr = func->MFCreateSample(&sample);
         av_log(avctx, AV_LOG_VERBOSE, "Sample Addr %p\n", sample);
@@ -487,15 +443,9 @@ AVHWFramesContext* frames_ctx = (AVHWFramesContext*)frame->hw_frames_ctx->data;
         printf("Buffer reference count before release: %lu\n", refCountBeforeRelease);
         if (buffer) {
         IMFMediaBuffer_Release(buffer);
-        buffer = NULL; // Avoid accidental access
-    }
+        buffer = NULL;
 
-        // DWORD bufferCount = 0;
-        // HRESULT hr = IMFSample_GetBufferCount(sample, &bufferCount);
-        // if (FAILED(hr)) {
-        //     av_log(avctx, AV_LOG_ERROR, "Failed to get buffer count: %s\n", ff_hr_str(hr));
-        // }
-        // av_log(avctx, AV_LOG_VERBOSE, "Buffer count: %lu\n", bufferCount);
+    }
 
      } else {
         av_log(avctx, AV_LOG_VERBOSE , "Inside the mf_v_avframe_to_sample - else part\n");
@@ -536,6 +486,8 @@ AVHWFramesContext* frames_ctx = (AVHWFramesContext*)frame->hw_frames_ctx->data;
   
 
     av_log(avctx, AV_LOG_VERBOSE, "After adding Sample Time and Sample Duration %d  %lld\n", mf_to_mf_time(avctx, frame->pts) ,mf_to_mf_time(avctx, frame->duration));
+    if(device_hwctx)
+        device_hwctx->unlock(device_hwctx->lock_ctx);
     return sample;
 }
 
@@ -681,6 +633,7 @@ static int mf_receive_sample(AVCodecContext *avctx, IMFSample **out_sample)
     return ret;
 }
 
+static int frameCount = 0;
 static int mf_receive_packet(AVCodecContext *avctx, AVPacket *avpkt)
 {
     MFContext *c = avctx->priv_data;
@@ -689,9 +642,17 @@ static int mf_receive_packet(AVCodecContext *avctx, AVPacket *avpkt)
 
     if (!c->frame->buf[0]) {
         ret = ff_encode_get_frame(avctx, c->frame);
-        if (ret < 0 && ret != AVERROR_EOF)
+        if (ret < 0 && ret != AVERROR_EOF){
+            av_frame_unref(c->frame);  // Unref frame on error
             return ret;
+        }
     }
+    // AVFrame* frame = c->frame;
+    av_log(avctx, AV_LOG_ERROR, "mf_receive_sample frameCount: %d\n", frameCount++);
+    // AVHWFramesContext* frames_ctx = (AVHWFramesContext*)frame->hw_frames_ctx->data; 
+    // AVD3D11VADeviceContext* device_hwctx = (AVD3D11VADeviceContext*)frames_ctx->device_ctx->hwctx;
+    
+    //     device_hwctx->lock(device_hwctx->lock_ctx);
 
     if (c->frame->buf[0]) {
         sample = mf_avframe_to_sample(avctx, c->frame);
@@ -704,7 +665,7 @@ static int mf_receive_packet(AVCodecContext *avctx, AVPacket *avpkt)
                 ICodecAPI_SetValue(c->codec_api, &ff_CODECAPI_AVEncVideoForceKeyFrame, FF_VAL_VT_UI4(1));
         }
     }
-
+    av_frame_unref(c->frame);
     ret = mf_send_sample(avctx, sample);
     if (sample)
         IMFSample_Release(sample);
@@ -713,13 +674,13 @@ static int mf_receive_packet(AVCodecContext *avctx, AVPacket *avpkt)
     if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF)
         return ret;
 
+//  device_hwctx->unlock(device_hwctx->lock_ctx);
     ret = mf_receive_sample(avctx, &sample);
     if (ret < 0)
         return ret;
 
     ret = mf_sample_to_avpacket(avctx, sample, avpkt);
     IMFSample_Release(sample);
-
     return ret;
 }
 

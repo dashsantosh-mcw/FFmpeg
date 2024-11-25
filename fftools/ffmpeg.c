@@ -308,6 +308,7 @@ const AVIOInterruptCB int_cb = { decode_interrupt_cb, NULL };
 
 static void ffmpeg_cleanup(int ret)
 {
+    av_log(NULL, AV_LOG_VERBOSE, "Inside ffmpeg_cleanup function - Return value! - %d\n", ret);
     if (do_benchmark) {
         int64_t maxrss = getmaxrss() / 1024;
         av_log(NULL, AV_LOG_INFO, "bench: maxrss=%"PRId64"KiB\n", maxrss);
@@ -351,7 +352,8 @@ static void ffmpeg_cleanup(int ret)
         av_log(NULL, AV_LOG_INFO, "Exiting normally, received signal %d.\n",
                (int) received_sigterm);
     } else if (ret && atomic_load(&transcode_init_done)) {
-        av_log(NULL, AV_LOG_INFO, "Conversion failed!\n");
+        av_log(NULL, AV_LOG_ERROR, "Return value! - %d\n", ret);
+        av_log(NULL, AV_LOG_ERROR, "Conversion failed!\n");
     }
     term_exit();
     ffmpeg_exited = 1;
@@ -862,6 +864,7 @@ static int transcode(Scheduler *sch)
     atomic_store(&transcode_init_done, 1);
 
     ret = sch_start(sch);
+    av_log(NULL, AV_LOG_VERBOSE, "First Return value inside transcode function after - sch_start : %d\n", ret);
     if (ret < 0)
         return ret;
 
@@ -884,7 +887,7 @@ static int transcode(Scheduler *sch)
     }
 
     ret = sch_stop(sch, &transcode_ts);
-
+    av_log(NULL, AV_LOG_VERBOSE, "Second Return value inside transcode function after - sch_stop : %d\n", ret);
     /* write the trailer if needed */
     for (int i = 0; i < nb_output_files; i++) {
         int err = of_write_trailer(output_files[i]);
@@ -989,6 +992,7 @@ int main(int argc, char **argv)
     }
 
     current_time = ti = get_benchmark_time_stamps();
+    av_log(NULL, AV_LOG_VERBOSE, "Return value before transocde function : %d\n", ret);
     ret = transcode(sch);
     if (ret >= 0 && do_benchmark) {
         int64_t utime, stime, rtime;
@@ -1000,11 +1004,12 @@ int main(int argc, char **argv)
                "bench: utime=%0.3fs stime=%0.3fs rtime=%0.3fs\n",
                utime / 1000000.0, stime / 1000000.0, rtime / 1000000.0);
     }
-
+av_log(NULL, AV_LOG_VERBOSE, "Return value before receved_nb_signals : %d\n", ret);
     ret = received_nb_signals                 ? 255 :
           (ret == FFMPEG_ERROR_RATE_EXCEEDED) ?  69 : ret;
 
 finish:
+av_log(NULL, AV_LOG_VERBOSE, "Return value after finish code : %d\n", ret);
     if (ret == AVERROR_EXIT)
         ret = 0;
 

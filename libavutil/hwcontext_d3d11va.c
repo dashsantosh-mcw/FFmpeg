@@ -321,7 +321,9 @@ static int d3d11va_frames_init(AVHWFramesContext *ctx)
     hwctx->texture_infos = av_realloc_f(NULL, ctx->initial_pool_size, sizeof(*hwctx->texture_infos));
     if (!hwctx->texture_infos)
         return AVERROR(ENOMEM);
-    s->nb_surfaces = ctx->initial_pool_size;
+    av_log(ctx, AV_LOG_VERBOSE, "INSIDE hwcontext_d3d11va.c-----d3d11va_frames_init-----initial_pool_size %d\n", ctx->initial_pool_size);
+    s->nb_surfaces = 38;
+    // ctx->initial_pool_size;
 
     ffhwframesctx(ctx)->pool_internal =
         av_buffer_pool_init2(sizeof(AVD3D11FrameDescriptor),
@@ -335,8 +337,8 @@ static int d3d11va_frames_init(AVHWFramesContext *ctx)
 static int d3d11va_get_buffer(AVHWFramesContext *ctx, AVFrame *frame)
 {
     AVD3D11FrameDescriptor *desc;
-    av_log(ctx, AV_LOG_DEBUG, "Get buffer ===========================\n");
     frame->buf[0] = av_buffer_pool_get(ctx->pool);
+    // av_log(ctx, AV_LOG_VERBOSE, "Re checking!!!!! After Get buffer ===========================\n");
     if (!frame->buf[0])
         return AVERROR(ENOMEM);
 

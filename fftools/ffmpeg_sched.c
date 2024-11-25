@@ -2567,11 +2567,27 @@ static int task_stop(Scheduler *sch, SchTask *task)
     int ret;
     void *thread_ret;
 
-    if (!task->thread_running)
-        return task_cleanup(sch, task->node);
+    // if (!task->thread_running)
+    //     return task_cleanup(sch, task->node);
+    if (!task->thread_running) {
+        ret = task_cleanup(sch, task->node);
+        if (ret < 0) {  // Check if task_cleanup failed
+            printf("task_cleanup failed: %s\n", av_err2str(ret));  // av_err2str gives a readable error message
+            return ret;
+        }
+        return 0;
+    }
 
+    // ret = pthread_join(task->thread, &thread_ret);
+    // av_assert0(ret == 0);
+    // Below is sachin's added code, it was like above before
     ret = pthread_join(task->thread, &thread_ret);
-    av_assert0(ret == 0);
+    if (ret != 0) {
+        printf("pthread_join failed: %s\n", strerror(ret));
+        return AVERROR_EXTERNAL;
+    }
+    printf("Thread stopped successfully, thread return value: %ld and return value is %d\n", (intptr_t)thread_ret, ret);
+
 
     task->thread_running = 0;
 
@@ -2598,6 +2614,8 @@ int sch_stop(Scheduler *sch, int64_t *finish_ts)
 
         err = task_stop(sch, &d->task);
         ret = err_merge(ret, err);
+        printf(
+               "Sch Demux Task finished with error code: %d (%s)\n", ret, av_err2str(ret));
     }
 
     for (unsigned i = 0; i < sch->nb_dec; i++) {
@@ -2605,6 +2623,8 @@ int sch_stop(Scheduler *sch, int64_t *finish_ts)
 
         err = task_stop(sch, &dec->task);
         ret = err_merge(ret, err);
+        printf(
+               "Sch Dec Task finished with error code: %d (%s)\n", ret, av_err2str(ret));
     }
 
     for (unsigned i = 0; i < sch->nb_filters; i++) {
@@ -2612,13 +2632,18 @@ int sch_stop(Scheduler *sch, int64_t *finish_ts)
 
         err = task_stop(sch, &fg->task);
         ret = err_merge(ret, err);
+        printf(
+               "SchFilter finished with error code: %d (%s)\n", ret, av_err2str(ret));
     }
 
     for (unsigned i = 0; i < sch->nb_enc; i++) {
         SchEnc *enc = &sch->enc[i];
 
         err = task_stop(sch, &enc->task);
+        printf("Stopping encoder task %u: %p\n", i, &enc->task);
         ret = err_merge(ret, err);
+        printf(
+               "Sch Encoder finished with error code: %d (%s)\n", ret, av_err2str(ret));
     }
 
     for (unsigned i = 0; i < sch->nb_mux; i++) {
@@ -2626,6 +2651,8 @@ int sch_stop(Scheduler *sch, int64_t *finish_ts)
 
         err = task_stop(sch, &mux->task);
         ret = err_merge(ret, err);
+        printf(
+               "Sch Mux finished with error code: %d (%s)\n", ret, av_err2str(ret));
     }
 
     if (finish_ts)

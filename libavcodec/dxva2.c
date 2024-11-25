@@ -520,6 +520,24 @@ static int d3d11va_create_decoder(AVCodecContext *avctx)
     if (!sctx->d3d11_views)
         return AVERROR(ENOMEM);
     sctx->nb_d3d11_views = texdesc.ArraySize;
+    av_log(avctx, AV_LOG_VERBOSE, "Inside create decoder function %d\n", sctx->nb_d3d11_views);
+    av_log(avctx, AV_LOG_VERBOSE, "Number of views: %d\n", sctx->nb_d3d11_views);
+    av_log(avctx, AV_LOG_VERBOSE, "ArraySize: %d\n", texdesc.ArraySize);
+    av_log(avctx, AV_LOG_VERBOSE, "Usage: %d\n", texdesc.Usage);
+    av_log(avctx, AV_LOG_VERBOSE, "BindFlags: %d\n", texdesc.BindFlags);
+    av_log(avctx, AV_LOG_VERBOSE, "CPUAccessFlags: %d\n", texdesc.CPUAccessFlags);
+    av_log(avctx, AV_LOG_VERBOSE, "MiscFlags: %d\n", texdesc.MiscFlags);
+    av_log(avctx, AV_LOG_VERBOSE, "Format: %d\n", texdesc.Format);
+    av_log(avctx, AV_LOG_VERBOSE, "SampleDesc: %d\n", texdesc.SampleDesc.Count);
+    av_log(avctx, AV_LOG_VERBOSE, "SampleDesc: %d\n", texdesc.SampleDesc.Quality);
+    av_log(avctx, AV_LOG_VERBOSE, "Width: %d\n", texdesc.Width);
+    av_log(avctx, AV_LOG_VERBOSE, "Height: %d\n", texdesc.Height);
+    av_log(avctx, AV_LOG_VERBOSE, "MipLevels: %d\n", texdesc.MipLevels);
+    av_log(avctx, AV_LOG_VERBOSE, "ArraySize: %d\n", texdesc.ArraySize);
+    av_log(avctx, AV_LOG_VERBOSE, "Format: %d\n", texdesc.Format);
+    av_log(avctx, AV_LOG_VERBOSE, "SampleDesc Count: %d\n", texdesc.SampleDesc.Count);
+    av_log(avctx, AV_LOG_VERBOSE, "SampleDesc Quality: %d\n", texdesc.SampleDesc.Quality);
+
 
     for (i = 0; i < sctx->nb_d3d11_views; i++) {
         D3D11_VIDEO_DECODER_OUTPUT_VIEW_DESC viewDesc = {
@@ -552,7 +570,8 @@ static int d3d11va_create_decoder(AVCodecContext *avctx)
     sctx->decoder_ref = bufref_wrap_interface((IUnknown *)sctx->d3d11_decoder);
     if (!sctx->decoder_ref)
         return AVERROR(ENOMEM);
-
+    av_log(avctx, AV_LOG_WARNING, "Decoder Device: %p, Device Context: %p, Video Device: %p, Video Context: %p, Frames Context: %p\n", 
+    device_hwctx->device, device_hwctx->device_context, device_hwctx->video_device, device_hwctx->video_context, frames_hwctx);
     return 0;
 }
 
@@ -631,7 +650,10 @@ int ff_dxva2_common_frame_params(AVCodecContext *avctx,
                             AV_PIX_FMT_P010 : AV_PIX_FMT_NV12;
     frames_ctx->width = FFALIGN(avctx->coded_width, surface_alignment);
     frames_ctx->height = FFALIGN(avctx->coded_height, surface_alignment);
-    frames_ctx->initial_pool_size = num_surfaces;
+    // The issue we got is from the decoder, so we can set the initial_pool_size to +1 works!!!!
+    // Initially the value was 17, but this caused the decoder to fail when scaling is enabled.
+    frames_ctx->initial_pool_size = 20;
+    printf("initial_pool_size: %d!!!!!!!!!!!!\n",frames_ctx->initial_pool_size);
 
 
 #if CONFIG_DXVA2
@@ -758,8 +780,8 @@ static void *get_surface(const AVCodecContext *avctx, const AVFrame *frame)
     if (frame->format == AV_PIX_FMT_D3D11) {
         FFDXVASharedContext *sctx = DXVA_SHARED_CONTEXT(avctx);
         intptr_t index = (intptr_t)frame->data[1];
-        av_log((void *)avctx, AV_LOG_DEBUG, "Checking frame with index: %d, nb_d3d11_views: %d\n", (int)index, sctx->nb_d3d11_views);
-        av_log((void *)avctx, AV_LOG_DEBUG, "Comparing textures: frame->data[0]: %p, sctx->d3d11_texture: %p\n", frame->data[0], sctx->d3d11_texture);
+        // av_log((void *)avctx, AV_LOG_DEBUG, "Checking frame with index: %d, nb_d3d11_views: %d\n", (int)index, sctx->nb_d3d11_views);
+        // av_log((void *)avctx, AV_LOG_DEBUG, "Comparing textures: frame->data[0]: %p, sctx->d3d11_texture: %p\n", frame->data[0], sctx->d3d11_texture);
         if (index < 0 || index >= sctx->nb_d3d11_views ||
             sctx->d3d11_texture != (ID3D11Texture2D *)frame->data[0]) {
             av_log((void *)avctx, AV_LOG_ERROR, "get_buffer frame is invalid! index: %d, \n");
@@ -934,7 +956,7 @@ int ff_dxva2_common_end_frame(AVCodecContext *avctx, AVFrame *frame,
             hr = IDirectXVideoDecoder_BeginFrame(DXVA2_CONTEXT(ctx)->decoder,
                                                  get_surface(avctx, frame),
                                                  NULL);
-            av_log(avctx, AV_LOG_VERBOSE, "IDirectXVideoDecoder_BeginFrame - Failed : 0x%x\n", (unsigned)hr);
+            // av_log(avctx, AV_LOG_VERBOSE, "IDirectXVideoDecoder_BeginFrame - hr result : 0x%x\n", (unsigned)hr);
 #endif
         if (hr != E_PENDING || ++runs > 50)
             break;
@@ -1050,6 +1072,7 @@ end:
 #if CONFIG_DXVA2
     if (avctx->pix_fmt == AV_PIX_FMT_DXVA2_VLD)
         hr = IDirectXVideoDecoder_EndFrame(DXVA2_CONTEXT(ctx)->decoder, NULL);
+        // av_log(avctx, AV_LOG_VERBOSE, "IDirectXVideoDecoder_EndFrame - hr result : 0x%x\n", (unsigned)hr);
 #endif
     ff_dxva2_unlock(avctx);
     if (FAILED(hr)) {
