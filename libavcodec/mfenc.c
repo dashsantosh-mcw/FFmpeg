@@ -348,26 +348,39 @@ static IMFSample *mf_v_avframe_to_sample(AVCodecContext *avctx, const AVFrame *f
     // av_log(avctx, AV_LOG_WARNING, "Enocder Device: %p, Encoder Device Context: %p, Encoder Video Device: %p, Encoder Video Context: %p, Frames Context: %p\n", 
     // device_hwctx->device, device_hwctx->device_context, device_hwctx->video_device, device_hwctx->video_context, frames_ctx);
 
+if(!c->dxgiManager){
+    
+    av_log(avctx, AV_LOG_VERBOSE, "create device manager... \n");
+    hr = func->MFCreateDXGIDeviceManager(&c->resetToken, &c->dxgiManager);
+        av_log(avctx, AV_LOG_VERBOSE, "after creation hr = %lx \n", hr);
+        if (SUCCEEDED(hr)) {
+            av_log(avctx, AV_LOG_VERBOSE, "reseting device");
+            hr = IMFDXGIDeviceManager_ResetDevice(c->dxgiManager, device_hwctx->device, c->resetToken);
+            av_log(avctx, AV_LOG_VERBOSE, "after resetting hr = %lx \n", hr);
 
-    // av_log(avctx, AV_LOG_VERBOSE, "create device manager... \n");
-    // hr = func->MFCreateDXGIDeviceManager(&c->resetToken, &c->dxgiManager);
-    //     av_log(avctx, AV_LOG_VERBOSE, "after creation hr = %lx \n", hr);
-    //     if (SUCCEEDED(hr)) {
-    //         av_log(avctx, AV_LOG_VERBOSE, "reseting device");
-    //         hr = IMFDXGIDeviceManager_ResetDevice(c->dxgiManager, device_hwctx->device, c->resetToken);
-    //         av_log(avctx, AV_LOG_VERBOSE, "after resetting hr = %lx \n", hr);
+            if (SUCCEEDED(hr)) {
+                av_log(avctx, AV_LOG_VERBOSE, "reset device manager hr %lx\n", hr);
+            }
+            av_log(avctx, AV_LOG_VERBOSE, "creating manager done...");
+        }
+        hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)c->dxgiManager);
+    if (FAILED(hr)){
+        av_log(avctx, AV_LOG_ERROR, "failed to set manager: %s\n", ff_hr_str(hr));
+    } else {
+        av_log(avctx, AV_LOG_VERBOSE, "d3d manager set\n");
+    }
+     hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
+    if (FAILED(hr)) {
+        av_log(avctx, AV_LOG_ERROR, "could not start streaming (%s)\n", ff_hr_str(hr));
+        return NULL;
+    }
 
-    //         if (SUCCEEDED(hr)) {
-    //             av_log(avctx, AV_LOG_VERBOSE, "reset device manager hr %lx\n", hr);
-    //         }
-    //         av_log(avctx, AV_LOG_VERBOSE, "creating manager done...");
-    //     }
-    //     hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)c->dxgiManager);
-    // if (FAILED(hr)){
-    //     av_log(avctx, AV_LOG_ERROR, "failed to set manager: %s\n", ff_hr_str(hr));
-    // } else {
-    //     av_log(avctx, AV_LOG_VERBOSE, "d3d manager set\n");
-    // }
+    hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
+    if (FAILED(hr)) {
+        av_log(avctx, AV_LOG_ERROR, "could not start stream (%s)\n", ff_hr_str(hr));
+        return NULL;
+    }
+}
 
     device_hwctx->lock(device_hwctx->lock_ctx); // Locking hardware context
         d3d11_texture = (ID3D11Texture2D *)frame->data[0];
@@ -1420,17 +1433,17 @@ static int mf_init_encoder(AVCodecContext *avctx)
     if ((ret = mf_setup_context(avctx)) < 0)
         return ret;
 
-    hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
-    if (FAILED(hr)) {
-        av_log(avctx, AV_LOG_ERROR, "could not start streaming (%s)\n", ff_hr_str(hr));
-        return AVERROR_EXTERNAL;
-    }
+    // hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
+    // if (FAILED(hr)) {
+    //     av_log(avctx, AV_LOG_ERROR, "could not start streaming (%s)\n", ff_hr_str(hr));
+    //     return AVERROR_EXTERNAL;
+    // }
 
-    hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
-    if (FAILED(hr)) {
-        av_log(avctx, AV_LOG_ERROR, "could not start stream (%s)\n", ff_hr_str(hr));
-        return AVERROR_EXTERNAL;
-    }
+    // hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
+    // if (FAILED(hr)) {
+    //     av_log(avctx, AV_LOG_ERROR, "could not start stream (%s)\n", ff_hr_str(hr));
+    //     return AVERROR_EXTERNAL;
+    // }
 
     if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER && c->async_events &&
         c->is_video && !avctx->extradata) {
