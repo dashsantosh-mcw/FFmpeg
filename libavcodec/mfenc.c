@@ -31,10 +31,18 @@
 #include "codec_internal.h"
 #include "internal.h"
 #include "compat/w32dlfcn.h"
+#if CONFIG_D3D11VA
+#include "libavutil/hwcontext_d3d11va.h"
+#endif
 
 typedef struct MFContext {
     AVClass *av_class;
     HMODULE library;
+    HMODULE d3d_dll;
+    ID3D11DeviceContext* d3d_context;
+    IMFDXGIDeviceManager *dxgiManager;
+    int resetToken;
+   
     MFFunctions functions;
     AVFrame *frame;
     int is_video, is_audio;
@@ -47,6 +55,7 @@ typedef struct MFContext {
     int out_stream_provides_samples;
     int draining, draining_done;
     int sample_sent;
+    int stream_started;
     int async_need_input, async_have_output, async_marker;
     int64_t reorder_delay;
     ICodecAPI *codec_api;
@@ -55,6 +64,7 @@ typedef struct MFContext {
     int opt_enc_quality;
     int opt_enc_scenario;
     int opt_enc_hw;
+    AVD3D11VADeviceContext* device_hwctx;
 } MFContext;
 
 static int mf_choose_output_type(AVCodecContext *avctx);
@@ -308,41 +318,97 @@ static IMFSample *mf_v_avframe_to_sample(AVCodecContext *avctx, const AVFrame *f
     MFContext *c = avctx->priv_data;
     IMFSample *sample;
     IMFMediaBuffer *buffer;
+    ID3D11Texture2D *d3d11_texture = NULL;
+    D3D11_TEXTURE2D_DESC desc;
+    int subIdx = 0;
     BYTE *data;
     HRESULT hr;
     int ret;
     int size;
+ 
+    MFFunctions *func = &c->functions;
+    AVHWFramesContext* frames_ctx = NULL; 
 
-    size = av_image_get_buffer_size(avctx->pix_fmt, avctx->width, avctx->height, 1);
-    if (size < 0)
-        return NULL;
+    if (frame->format == AV_PIX_FMT_D3D11) {
+    frames_ctx = (AVHWFramesContext*)frame->hw_frames_ctx->data; 
+    c->device_hwctx = (AVD3D11VADeviceContext*)frames_ctx->device_ctx->hwctx;
 
-    sample = ff_create_memory_sample(&c->functions, NULL, size,
-                                     c->in_info.cbAlignment);
-    if (!sample)
-        return NULL;
-
-    hr = IMFSample_GetBufferByIndex(sample, 0, &buffer);
-    if (FAILED(hr)) {
-        IMFSample_Release(sample);
-        return NULL;
+    if(!c->dxgiManager){
+        hr = func->MFCreateDXGIDeviceManager(&c->resetToken, &c->dxgiManager);
+        if (SUCCEEDED(hr)) {
+            hr = IMFDXGIDeviceManager_ResetDevice(c->dxgiManager, c->device_hwctx->device, c->resetToken);
+            if (FAILED(hr)) {
+                av_log(avctx, AV_LOG_ERROR, "failed to reset device: %s\n", ff_hr_str(hr));
+            }
+        }
+        hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)c->dxgiManager);
+        if (FAILED(hr)){
+            av_log(avctx, AV_LOG_ERROR, "failed to set manager: %s\n", ff_hr_str(hr));
+        }
     }
 
-    hr = IMFMediaBuffer_Lock(buffer, &data, NULL, NULL);
-    if (FAILED(hr)) {
+        d3d11_texture = (ID3D11Texture2D *)frame->data[0];
+        subIdx = (int)(intptr_t)frame->data[1];
+        if (!d3d11_texture)
+        {
+            av_log(avctx, AV_LOG_ERROR, "texture not found \n");
+            return NULL;
+        }
+       
+        hr = func->MFCreateSample(&sample);
+       
+        if (FAILED(hr))
+            return NULL;
+        hr = func->MFCreateDXGISurfaceBuffer(&IID_ID3D11Texture2D, d3d11_texture, subIdx, 0, &buffer);
+
+        //if (FAILED(hr)) {
+        //    IMFSample_Release(sample);
+        //    return NULL;
+       // }
+
+        hr = IMFSample_AddBuffer(sample, buffer);
+        if (FAILED(hr)) {
+            IMFSample_Release(sample);
+            return NULL;
+        }
+
         IMFMediaBuffer_Release(buffer);
-        IMFSample_Release(sample);
-        return NULL;
-    }
 
-    ret = av_image_copy_to_buffer((uint8_t *)data, size, (void *)frame->data, frame->linesize,
-                                  avctx->pix_fmt, avctx->width, avctx->height, 1);
-    IMFMediaBuffer_SetCurrentLength(buffer, size);
-    IMFMediaBuffer_Unlock(buffer);
-    IMFMediaBuffer_Release(buffer);
-    if (ret < 0) {
-        IMFSample_Release(sample);
-        return NULL;
+    
+
+    } else {
+
+        size = av_image_get_buffer_size(avctx->pix_fmt, avctx->width, avctx->height, 1);
+        if (size < 0)
+            return NULL;
+
+        sample = ff_create_memory_sample(&c->functions, NULL, size,
+                                        c->in_info.cbAlignment);
+        if (!sample)
+            return NULL;
+
+        hr = IMFSample_GetBufferByIndex(sample, 0, &buffer);
+        if (FAILED(hr)) {
+            IMFSample_Release(sample);
+            return NULL;
+        }
+
+        hr = IMFMediaBuffer_Lock(buffer, &data, NULL, NULL);
+        if (FAILED(hr)) {
+            IMFMediaBuffer_Release(buffer);
+            IMFSample_Release(sample);
+            return NULL;
+        }
+
+        ret = av_image_copy_to_buffer((uint8_t *)data, size, (void *)frame->data, frame->linesize,
+                                    avctx->pix_fmt, avctx->width, avctx->height, 1);
+        IMFMediaBuffer_SetCurrentLength(buffer, size);
+        IMFMediaBuffer_Unlock(buffer);
+        IMFMediaBuffer_Release(buffer);
+        if (ret < 0) {
+            IMFSample_Release(sample);
+            return NULL;
+        }
     }
 
     IMFSample_SetSampleDuration(sample, mf_to_mf_time(avctx, frame->duration));
@@ -498,7 +564,9 @@ static int mf_receive_packet(AVCodecContext *avctx, AVPacket *avpkt)
         if (ret < 0 && ret != AVERROR_EOF)
             return ret;
     }
-
+    //if(c->device_hwctx){
+    //    c->device_hwctx->lock(c->device_hwctx->lock_ctx); 
+    //}
     if (c->frame->buf[0]) {
         sample = mf_avframe_to_sample(avctx, c->frame);
         if (!sample) {
@@ -511,21 +579,42 @@ static int mf_receive_packet(AVCodecContext *avctx, AVPacket *avpkt)
         }
     }
 
+    if(!c->stream_started)
+    {
+        HRESULT hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
+        if (FAILED(hr)) {
+            av_log(avctx, AV_LOG_ERROR, "could not start streaming (%s)\n", ff_hr_str(hr));
+            return AVERROR(EBADMSG);
+        }
+
+        hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
+        if (FAILED(hr)) {
+            av_log(avctx, AV_LOG_ERROR, "could not start stream (%s)\n", ff_hr_str(hr));
+            return AVERROR(EBADMSG);
+        }
+
+        c->stream_started = 1;
+    }
+
     ret = mf_send_sample(avctx, sample);
     if (sample)
         IMFSample_Release(sample);
     if (ret != AVERROR(EAGAIN))
         av_frame_unref(c->frame);
     if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF)
-        return ret;
+        goto fail;
 
     ret = mf_receive_sample(avctx, &sample);
     if (ret < 0)
-        return ret;
+        goto fail;
 
     ret = mf_sample_to_avpacket(avctx, sample, avpkt);
     IMFSample_Release(sample);
 
+fail:
+    if (c->device_hwctx){
+    //    c->device_hwctx->unlock(c->device_hwctx->lock_ctx);
+    }
     return ret;
 }
 
@@ -732,8 +821,16 @@ FF_ENABLE_DEPRECATION_WARNINGS
 static int64_t mf_encv_input_score(AVCodecContext *avctx, IMFMediaType *type)
 {
     enum AVPixelFormat pix_fmt = ff_media_type_to_pix_fmt((IMFAttributes *)type);
-    if (pix_fmt != avctx->pix_fmt)
-        return -1; // can not use
+
+    if (avctx->pix_fmt == AV_PIX_FMT_D3D11) {
+        if (pix_fmt != AV_PIX_FMT_NV12) {
+            return -1; // can not use
+        }
+    }
+    else {
+        if (pix_fmt != avctx->pix_fmt)
+            return -1; // can not use
+    }
 
     return 0;
 }
@@ -741,9 +838,16 @@ static int64_t mf_encv_input_score(AVCodecContext *avctx, IMFMediaType *type)
 static int mf_encv_input_adjust(AVCodecContext *avctx, IMFMediaType *type)
 {
     enum AVPixelFormat pix_fmt = ff_media_type_to_pix_fmt((IMFAttributes *)type);
-    if (pix_fmt != avctx->pix_fmt) {
-        av_log(avctx, AV_LOG_ERROR, "unsupported input pixel format set\n");
-        return AVERROR(EINVAL);
+    if (avctx->pix_fmt == AV_PIX_FMT_D3D11) {
+        if (pix_fmt != AV_PIX_FMT_NV12 && pix_fmt != AV_PIX_FMT_D3D11) {
+            av_log(avctx, AV_LOG_ERROR, "unsupported input pixel format set\n");
+            return AVERROR(EINVAL);
+        }
+    } else {
+        if (pix_fmt != avctx->pix_fmt) {
+            av_log(avctx, AV_LOG_ERROR, "unsupported input pixel format set\n");
+            return AVERROR(EINVAL);
+        }
     }
 
     //ff_MFSetAttributeSize((IMFAttributes *)type, &MF_MT_FRAME_SIZE, avctx->width, avctx->height);
@@ -1111,18 +1215,6 @@ static int mf_init_encoder(AVCodecContext *avctx)
     if ((ret = mf_setup_context(avctx)) < 0)
         return ret;
 
-    hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
-    if (FAILED(hr)) {
-        av_log(avctx, AV_LOG_ERROR, "could not start streaming (%s)\n", ff_hr_str(hr));
-        return AVERROR_EXTERNAL;
-    }
-
-    hr = IMFTransform_ProcessMessage(c->mft, MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
-    if (FAILED(hr)) {
-        av_log(avctx, AV_LOG_ERROR, "could not start stream (%s)\n", ff_hr_str(hr));
-        return AVERROR_EXTERNAL;
-    }
-
     if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER && c->async_events &&
         c->is_video && !avctx->extradata) {
         int sleep = 10000, total = 0;
@@ -1180,6 +1272,7 @@ static int mf_load_library(AVCodecContext *avctx)
 
 #if !HAVE_UWP
     c->library = dlopen("mfplat.dll", 0);
+    c->d3d_dll = dlopen("D3D11.dll", 0);
 
     if (!c->library) {
         av_log(c, AV_LOG_ERROR, "DLL mfplat.dll failed to open\n");
@@ -1192,6 +1285,8 @@ static int mf_load_library(AVCodecContext *avctx)
     LOAD_MF_FUNCTION(c, MFCreateAlignedMemoryBuffer);
     LOAD_MF_FUNCTION(c, MFCreateSample);
     LOAD_MF_FUNCTION(c, MFCreateMediaType);
+    LOAD_MF_FUNCTION(c, MFCreateDXGISurfaceBuffer);
+    LOAD_MF_FUNCTION(c, MFCreateDXGIDeviceManager);
     // MFTEnumEx is missing in Windows Vista's mfplat.dll.
     LOAD_MF_FUNCTION(c, MFTEnumEx);
 
@@ -1213,6 +1308,7 @@ static int mf_close(AVCodecContext *avctx)
         ff_free_mf(&c->functions, &c->mft);
 
     dlclose(c->library);
+    dlclose(c->d3d_dll);
     c->library = NULL;
 #else
     ff_free_mf(&c->functions, &c->mft);
@@ -1307,6 +1403,7 @@ static const FFCodecDefault defaults[] = {
 
 #define VFMTS \
         .p.pix_fmts     = (const enum AVPixelFormat[]){ AV_PIX_FMT_NV12,       \
+                                                        AV_PIX_FMT_D3D11,       \
                                                         AV_PIX_FMT_YUV420P,    \
                                                         AV_PIX_FMT_NONE },
 #define VCAPS \
