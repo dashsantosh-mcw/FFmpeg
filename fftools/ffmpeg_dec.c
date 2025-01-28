@@ -17,6 +17,7 @@
  */
 
 #include <stdbit.h>
+#include<sys/time.h>
 
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
@@ -914,7 +915,8 @@ static int decoder_thread(void *arg)
     DecoderPriv  *dp = arg;
     DecThreadContext dt;
     int ret = 0, input_status = 0;
-
+    double elapsed_time = 0.0;
+    int framesCount = 0;
     ret = dec_thread_init(&dt);
     if (ret < 0)
         goto finish;
@@ -950,7 +952,18 @@ static int decoder_thread(void *arg)
                 goto finish;
         }
 
+        struct timeval start;
+        gettimeofday(&start, NULL);
         ret = packet_decode(dp, have_data ? dt.pkt : NULL, dt.frame);
+        struct timeval end;
+        gettimeofday(&end, NULL);
+        double current_time = 0.0;
+        long seconds = end.tv_sec - start.tv_sec;
+        long useconds = end.tv_usec - start.tv_usec;
+        current_time = seconds + useconds / 1e6;
+
+        elapsed_time += current_time;
+        framesCount++;
 
         av_packet_unref(dt.pkt);
         av_frame_unref(dt.frame);
@@ -983,6 +996,10 @@ static int decoder_thread(void *arg)
             break;
         }
     }
+
+    av_log(dp, AV_LOG_INFO, "Decoder thread finished\n");
+    av_log(dp, AV_LOG_INFO, "Decoder thread: %f seconds elapsed, %d frames\n",
+           elapsed_time, framesCount);
 
     // EOF is normal thread termination
     if (ret == AVERROR_EOF)

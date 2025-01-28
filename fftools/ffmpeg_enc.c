@@ -18,7 +18,7 @@
 
 #include <math.h>
 #include <stdint.h>
-
+#include<sys/time.h>
 #include "ffmpeg.h"
 
 #include "libavutil/avassert.h"
@@ -845,6 +845,8 @@ int encoder_thread(void *arg)
     EncoderThread et;
     int ret = 0, input_status = 0;
     int name_set = 0;
+    double elapsed_time = 0.0;
+    int framesCount = 0;
 
     ret = enc_thread_init(&et);
     if (ret < 0)
@@ -886,7 +888,18 @@ int encoder_thread(void *arg)
             name_set = 1;
         }
 
+        struct timeval start;
+        gettimeofday(&start, NULL);
         ret = frame_encode(ost, et.frame, et.pkt);
+        struct timeval end;
+        gettimeofday(&end, NULL);
+        double current_time = 0.0;
+        long seconds = end.tv_sec - start.tv_sec;
+        long useconds = end.tv_usec - start.tv_usec;
+        current_time = seconds + useconds / 1e6;
+
+        elapsed_time += current_time;
+        framesCount++;
 
         av_packet_unref(et.pkt);
         av_frame_unref(et.frame);
@@ -908,6 +921,10 @@ int encoder_thread(void *arg)
             av_log(ost, AV_LOG_ERROR, "Error flushing encoder: %s\n",
                    av_err2str(ret));
     }
+
+    av_log(ost, AV_LOG_INFO, "Encoder thread finished\n");
+    av_log(ost, AV_LOG_INFO, "Encoder thread: %f seconds elapsed, %d frames\n",
+           elapsed_time, framesCount);
 
     // EOF is normal thread termination
     if (ret == AVERROR_EOF)
