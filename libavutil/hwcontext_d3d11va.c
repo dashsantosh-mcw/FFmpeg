@@ -82,6 +82,8 @@ typedef struct D3D11VAFramesContext {
 
     int nb_surfaces;
     int nb_surfaces_used;
+    int retries;
+    int max_retries;
 
     DXGI_FORMAT format;
 
@@ -254,7 +256,9 @@ static AVBufferRef *d3d11va_pool_alloc(void *opaque, size_t size)
     ID3D11Texture2D_GetDesc(hwctx->texture, &texDesc);
 
     if (s->nb_surfaces_used >= texDesc.ArraySize) {
-        av_log(ctx, AV_LOG_ERROR, "Static surface pool size exceeded.\n");
+        if (s->retries >= s->max_retries) {
+            av_log(ctx, AV_LOG_ERROR, "Static surface pool size exceeded.\n");
+        }
         return NULL;
     }
 
@@ -335,20 +339,31 @@ static int d3d11va_frames_init(AVHWFramesContext *ctx)
 static int d3d11va_get_buffer(AVHWFramesContext *ctx, AVFrame *frame)
 {
     AVD3D11FrameDescriptor *desc;
+    D3D11VAFramesContext       *s = ctx->hwctx;
+    s->retries = 0;
+    s->max_retries = 20;
+    const int sleep_duration = 10000;
 
-    frame->buf[0] = av_buffer_pool_get(ctx->pool);
-    if (!frame->buf[0])
-        return AVERROR(ENOMEM);
+    while (s->retries < s->max_retries) {
+        
+        frame->buf[0] = av_buffer_pool_get(ctx->pool);
+        if (frame->buf[0]) {
+            desc = (AVD3D11FrameDescriptor *)frame->buf[0]->data;
 
-    desc = (AVD3D11FrameDescriptor *)frame->buf[0]->data;
+            frame->data[0] = (uint8_t *)desc->texture;
+            frame->data[1] = (uint8_t *)desc->index;
+            frame->format  = AV_PIX_FMT_D3D11;
+            frame->width   = ctx->width;
+            frame->height  = ctx->height;
 
-    frame->data[0] = (uint8_t *)desc->texture;
-    frame->data[1] = (uint8_t *)desc->index;
-    frame->format  = AV_PIX_FMT_D3D11;
-    frame->width   = ctx->width;
-    frame->height  = ctx->height;
+            return 0;
+        }
 
-    return 0;
+        av_usleep(1000);
+        s->retries++;
+    }
+
+    return AVERROR(ENOMEM);
 }
 
 static int d3d11va_transfer_get_formats(AVHWFramesContext *ctx,
