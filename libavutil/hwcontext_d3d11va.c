@@ -19,7 +19,7 @@
 #include "config.h"
 
 #include <windows.h>
-
+#include <sys/time.h>
 #define COBJMACROS
 
 #include <initguid.h>
@@ -428,6 +428,13 @@ static void fill_texture_ptrs(uint8_t *data[4], int linesize[4],
                            (uint8_t*)map->pData, linesize);
 }
 
+static double elapsed1 = 0.0;
+static double elapsed2 = 0.0;
+static double elapsed3 = 0.0;
+static double elapsed4 = 0.0;
+static double elapsed5 = 0.0;
+static int frameCount = 0;
+
 static int d3d11va_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
                                  const AVFrame *src)
 {
@@ -458,30 +465,70 @@ static int d3d11va_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
         ID3D11Texture2D_GetDesc((ID3D11Texture2D *)texture, &desc);
         res = d3d11va_create_staging_texture(ctx, desc.Format);
         if (res < 0)
-            return res;
+        return res;
     }
 
     staging = (ID3D11Resource *)s->staging_texture;
+    struct timeval start, end;
+    double current_time = 0.0;
+
+    long seconds = 0;
+    long useconds = 0;
+
 
     ID3D11Texture2D_GetDesc(s->staging_texture, &desc);
 
     if (download) {
+        gettimeofday(&start, NULL);
         ID3D11DeviceContext_CopySubresourceRegion(device_hwctx->device_context,
                                                   staging, 0, 0, 0, 0,
                                                   texture, index, NULL);
-
+        gettimeofday(&end, NULL);
+        current_time = 0.0;
+        seconds = end.tv_sec - start.tv_sec;
+        useconds = end.tv_usec - start.tv_usec;
+        current_time = seconds + useconds / 1e6;
+        elapsed1 += current_time;
+        
+        gettimeofday(&start, NULL);
         hr = ID3D11DeviceContext_Map(device_hwctx->device_context,
                                      staging, 0, D3D11_MAP_READ, 0, &map);
         if (FAILED(hr))
             goto map_failed;
+        gettimeofday(&end, NULL);
+        current_time = 0.0;
+        seconds = end.tv_sec - start.tv_sec;
+        useconds = end.tv_usec - start.tv_usec;
+        current_time = seconds + useconds / 1e6;
+        elapsed2 += current_time;
 
+        gettimeofday(&start, NULL);
         fill_texture_ptrs(map_data, map_linesize, ctx, &desc, &map);
-
+        gettimeofday(&end, NULL);
+        current_time = 0.0;
+        seconds = end.tv_sec - start.tv_sec;
+        useconds = end.tv_usec - start.tv_usec;
+        current_time = seconds + useconds / 1e6;
+        elapsed3 += current_time;
+        gettimeofday(&start, NULL);
         av_image_copy2(dst->data, dst->linesize, map_data, map_linesize,
                        ctx->sw_format, w, h);
-
+        gettimeofday(&end, NULL);
+        current_time = 0.0;
+        seconds = end.tv_sec - start.tv_sec;
+        useconds = end.tv_usec - start.tv_usec;
+        current_time = seconds + useconds / 1e6;
+        elapsed4 += current_time;
+        gettimeofday(&start, NULL);
         ID3D11DeviceContext_Unmap(device_hwctx->device_context, staging, 0);
+        gettimeofday(&end, NULL);
+        current_time = 0.0;
+        seconds = end.tv_sec - start.tv_sec;
+        useconds = end.tv_usec - start.tv_usec;
+        current_time = seconds + useconds / 1e6;
+        elapsed5 += current_time;
     } else {
+        // gettimeofday(&start, NULL);
         hr = ID3D11DeviceContext_Map(device_hwctx->device_context,
                                      staging, 0, D3D11_MAP_WRITE, 0, &map);
         if (FAILED(hr))
@@ -493,13 +540,36 @@ static int d3d11va_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
                        ctx->sw_format, w, h);
 
         ID3D11DeviceContext_Unmap(device_hwctx->device_context, staging, 0);
+        // gettimeofday(&end, NULL);
+        // current_time = 0.0;
+        // seconds = end.tv_sec - start.tv_sec;
+        // useconds = end.tv_usec - start.tv_usec;
+        // current_time = seconds + useconds / 1e6;
+        // elapsed3 += current_time;
 
+        // gettimeofday(&start, NULL);
         ID3D11DeviceContext_CopySubresourceRegion(device_hwctx->device_context,
                                                   texture, index, 0, 0, 0,
                                                   staging, 0, NULL);
+        // gettimeofday(&end, NULL);
+        // current_time = 0.0;
+        // seconds = end.tv_sec - start.tv_sec;
+        // useconds = end.tv_usec - start.tv_usec;
+        // current_time = seconds + useconds / 1e6;
+        // elapsed4 += current_time;
     }
 
     device_hwctx->unlock(device_hwctx->lock_ctx);
+    frameCount++;
+
+    if (frameCount % 100 == 0) {
+        av_log(ctx, AV_LOG_VERBOSE, "elapsed1 - ID3D11DeviceContext_CopySubresourceRegion: %f\n", elapsed1);
+        av_log(ctx, AV_LOG_VERBOSE, "elapsed2 - ID3D11DeviceContext_Map: %f\n", elapsed2);
+        av_log(ctx, AV_LOG_VERBOSE, "elapsed3 - fill_texture_ptrs: %f\n", elapsed3);
+        av_log(ctx, AV_LOG_VERBOSE, "elapsed4 - av_image_copy2 : %f\n", elapsed4);
+        av_log(ctx, AV_LOG_VERBOSE, "elapsed5 - ID3D11DeviceContext_Unmap: %f\n", elapsed5);
+        av_log(ctx, AV_LOG_VERBOSE, "frameCount: %d\n", frameCount);
+    }
     return 0;
 
 map_failed:
