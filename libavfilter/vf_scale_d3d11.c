@@ -29,6 +29,8 @@ typedef struct D3D11ScaleContext {
     int width, height;
     int inputWidth, inputHeight;
     int encoder_requires_software_frame;
+    DXGI_FORMAT input_format;       
+    DXGI_FORMAT output_format;
 } D3D11ScaleContext;
 
 
@@ -88,7 +90,7 @@ static int d3d11scale_configure_processor(D3D11ScaleContext *s, AVFilterContext 
         .Height = s->height,
         .MipLevels = 1,
         .ArraySize = 1,
-        .Format = DXGI_FORMAT_NV12,
+        .Format = s->output_format,
         .SampleDesc = { .Count = 1 },
         .Usage = D3D11_USAGE_DEFAULT,
         .BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_VIDEO_ENCODER,
@@ -156,9 +158,8 @@ static int d3d11scale_filter_frame(AVFilterLink* inlink, AVFrame* in)
     // Lock the hardware context for processing
     AVD3D11VADeviceContext *d3d11_hwctx = (AVD3D11VADeviceContext *)filter_device_ctx->hwctx;
     //d3d11_hwctx->lock(d3d11_hwctx->lock_ctx); 
-    s->inputWidth = in->width;
-    s->inputHeight = in->height;
-
+    
+    
     // Allocate output frame
     out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     if (!out) {
@@ -166,9 +167,18 @@ static int d3d11scale_filter_frame(AVFilterLink* inlink, AVFrame* in)
         av_frame_free(&in);
         return AVERROR(ENOMEM);
     }
-
+    
     // Configure the D3D11 video processor
     if (!s->processor) {
+        //get texture desc from in
+        D3D11_TEXTURE2D_DESC textureDesc;
+        ID3D11Texture2D *input_texture = (ID3D11Texture2D *)in->data[0];
+        input_texture->lpVtbl->GetDesc(input_texture, &textureDesc);
+        s->inputWidth = textureDesc.Width;
+        s->inputHeight = textureDesc.Height;
+        s->input_format = textureDesc.Format;
+        s->output_format = DXGI_FORMAT_NV12; 
+
         if (d3d11scale_configure_processor(s, ctx) < 0) {
             av_log(ctx, AV_LOG_ERROR, "Failed to configure processor\n");
             av_frame_free(&in);
@@ -181,7 +191,7 @@ static int d3d11scale_filter_frame(AVFilterLink* inlink, AVFrame* in)
     int subIdx = (int)(intptr_t)in->data[1];
 
     D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {
-        .FourCC = DXGI_FORMAT_NV12,
+        .FourCC = s->input_format,
         .ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D,
         .Texture2D.ArraySlice = subIdx
     };
