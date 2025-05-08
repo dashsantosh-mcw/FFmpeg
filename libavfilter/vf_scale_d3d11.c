@@ -10,11 +10,17 @@
 #include "libavutil/hwcontext_d3d11va.h"
 #endif
 
+enum OutputFormat {
+    OUTPUT_NV12 = 0,
+    OUTPUT_P010 = 1,
+};
+
 typedef struct D3D11ScaleContext {
     const AVClass *classCtx;
     char *w_expr;
     char *h_expr;
-    
+    int output_format_opt;
+
     // D3D11 objects
     ID3D11Device *device;
     ID3D11DeviceContext *context;
@@ -67,6 +73,18 @@ static void release_d3d11_resources(D3D11ScaleContext *s) {
 
 static int d3d11scale_configure_processor(D3D11ScaleContext *s, AVFilterContext *ctx) {
     HRESULT hr;
+
+    switch (s->output_format_opt) {
+        case OUTPUT_NV12:
+            s->output_format = DXGI_FORMAT_NV12;
+            break;
+        case OUTPUT_P010:
+            s->output_format = DXGI_FORMAT_P010;
+            break;
+        default:
+            av_log(ctx, AV_LOG_ERROR, "Invalid output format specified\n");
+            return AVERROR(EINVAL);
+    }
 
     // Get D3D11 device and context from hardware device context
     AVHWDeviceContext *hwctx = (AVHWDeviceContext *)s->hw_device_ctx->data;
@@ -179,7 +197,6 @@ static int d3d11scale_filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->inputWidth = textureDesc.Width;
         s->inputHeight = textureDesc.Height;
         s->input_format = textureDesc.Format;
-        s->output_format = DXGI_FORMAT_NV12; 
 
         ret = d3d11scale_configure_processor(s, ctx);
         if (ret < 0) {
@@ -346,9 +363,21 @@ static int d3d11scale_config_props(AVFilterLink *outlink)
     if (!s->hw_frames_ctx_out)
         return AVERROR(ENOMEM);
 
+    enum AVPixelFormat sw_format;
+    switch (s->output_format_opt) {
+        case OUTPUT_NV12:
+            sw_format = AV_PIX_FMT_NV12;
+            break;
+        case OUTPUT_P010:
+            sw_format = AV_PIX_FMT_P010;
+            break;
+        default:
+            return AVERROR(EINVAL);
+    }
+
     AVHWFramesContext *frames_ctx = (AVHWFramesContext *)s->hw_frames_ctx_out->data;
     frames_ctx->format = AV_PIX_FMT_D3D11;
-    frames_ctx->sw_format = AV_PIX_FMT_NV12;
+    frames_ctx->sw_format = sw_format;
     frames_ctx->width = s->width;
     frames_ctx->height = s->height;
     frames_ctx->initial_pool_size = 30; // Adjust pool size as needed
@@ -411,6 +440,9 @@ static const AVFilterPad d3d11scale_outputs[] = {
 static const AVOption d3d11scale_options[] = {
     { "width",  "Output video width",  OFFSET(w_expr), AV_OPT_TYPE_STRING, {.str = "iw"}, .flags = FLAGS },
     { "height", "Output video height", OFFSET(h_expr), AV_OPT_TYPE_STRING, {.str = "ih"}, .flags = FLAGS },
+    { "output_fmt", "Output format", OFFSET(output_format_opt), AV_OPT_TYPE_INT, {.i64 = OUTPUT_NV12}, 0, OUTPUT_P010, FLAGS, "fmt" },
+    { "nv12", "NV12 format", 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_NV12}, 0, 0, FLAGS, "fmt" },
+    { "p010", "P010 format", 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_P010}, 0, 0, FLAGS, "fmt" },
     { NULL }
 };
 
