@@ -1079,7 +1079,7 @@ int ff_decode_get_hw_frames_ctx(AVCodecContext *avctx,
     if (frames_ctx->initial_pool_size) {
         // We guarantee 4 base work surfaces. The function above guarantees 1
         // (the absolute minimum), so add the missing count.
-        frames_ctx->initial_pool_size += 3;
+        frames_ctx->initial_pool_size += 33;
     }
 
     ret = av_hwframe_ctx_init(avctx->hw_frames_ctx);
