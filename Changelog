@@ -19,6 +19,7 @@ version <next>:
 - VVC decoder supports all content of SCC (Screen Content Coding):
   IBC (Inter Block Copy), Palette Mode and ACT (Adaptive Color Transform
 - vf_scale_d3d11 filter
+- mfenc supports d3d11 input surfaces
 
 
 version 7.1:
