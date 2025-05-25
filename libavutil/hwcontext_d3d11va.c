@@ -130,12 +130,16 @@ static void d3d11va_frames_uninit(AVHWFramesContext *ctx)
     D3D11VAFramesContext *s = ctx->hwctx;
     AVD3D11VAFramesContext *frames_hwctx = &s->p;
 
-    if (frames_hwctx->texture)
+    if (frames_hwctx->texture){
+        av_log(ctx, AV_LOG_DEBUG, "Releasing %d textures\n", s->nb_surfaces_used);
         ID3D11Texture2D_Release(frames_hwctx->texture);
+    }
     frames_hwctx->texture = NULL;
 
-    if (s->staging_texture)
+    if (s->staging_texture){
+        av_log(ctx, AV_LOG_DEBUG, "Releasing staging texture\n");
         ID3D11Texture2D_Release(s->staging_texture);
+    }
     s->staging_texture = NULL;
 
     av_freep(&frames_hwctx->texture_infos);
@@ -176,6 +180,7 @@ static int d3d11va_frames_get_constraints(AVHWDeviceContext *ctx,
 static void free_texture(void *opaque, uint8_t *data)
 {
     ID3D11Texture2D_Release((ID3D11Texture2D *)opaque);
+    av_log(NULL, AV_LOG_DEBUG, "Releasing texture free %p\n", opaque);
     av_free(data);
 }
 
