@@ -34,6 +34,7 @@
 #if CONFIG_D3D11VA
 #include "libavutil/hwcontext_d3d11va.h"
 #endif
+#include <sys/time.h>>
 
 typedef struct MFContext {
     AVClass *av_class;
@@ -64,6 +65,16 @@ typedef struct MFContext {
     int opt_enc_scenario;
     int opt_enc_hw;
     AVD3D11VADeviceContext* device_hwctx;
+    // timing measurements 
+    // Timing measurements
+    double elapsed_copy_image;     // time spent in av_image_copy_to_buffer
+    double elapsed_copy_packet;    // time spent in memcpy to AVPacket
+    double elapsed_process;        // time spent in ProcessInput
+    double elapsed_output;         // time spent in ProcessOutput
+    double elapsed_buffer_create;  // time spent in MFCreateDXGISurfaceBuffer
+    double elapsed_buffer_add;     // time spent in IMFSample_AddBuffer
+    double elapsed_wait;          // time spent in mf_wait_events
+    int frame_count;              // number of frames processed
 } MFContext;
 
 static int mf_choose_output_type(AVCodecContext *avctx);
@@ -76,9 +87,13 @@ static int mf_setup_context(AVCodecContext *avctx);
 static int mf_wait_events(AVCodecContext *avctx)
 {
     MFContext *c = avctx->priv_data;
+    struct timeval start, end;
+    double current_time;
 
     if (!c->async_events)
         return 0;
+
+    gettimeofday(&start, NULL);
 
     while (!(c->async_need_input || c->async_have_output || c->draining_done || c->async_marker)) {
         IMFMediaEvent *ev = NULL;
@@ -108,6 +123,10 @@ static int mf_wait_events(AVCodecContext *avctx)
         }
         IMFMediaEvent_Release(ev);
     }
+
+    gettimeofday(&end, NULL);
+    current_time = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
+    c->elapsed_wait += current_time;
 
     return 0;
 }
@@ -268,7 +287,12 @@ static int mf_sample_to_avpacket(AVCodecContext *avctx, IMFSample *sample, AVPac
         return AVERROR_EXTERNAL;
     }
 
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
     memcpy(avpkt->data, data, len);
+    gettimeofday(&end, NULL);
+    double current_time = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
+    c->elapsed_copy_packet += current_time;
 
     IMFMediaBuffer_Unlock(buffer);
     IMFMediaBuffer_Release(buffer);
@@ -349,6 +373,9 @@ static int process_d3d11_frame(AVCodecContext *avctx, const AVFrame *frame, IMFS
     IMFMediaBuffer *buffer = NULL;
     int subIdx = 0;
     HRESULT hr;
+    struct timeval start, end;
+    double current_time;
+    int seconds, useconds;
 
     frames_ctx = (AVHWFramesContext*)frame->hw_frames_ctx->data;
     c->device_hwctx = (AVD3D11VADeviceContext*)frames_ctx->device_ctx->hwctx;
@@ -374,14 +401,27 @@ static int process_d3d11_frame(AVCodecContext *avctx, const AVFrame *frame, IMFS
         return AVERROR_EXTERNAL;
     }
 
+    gettimeofday(&start, NULL);
     hr = func->MFCreateDXGISurfaceBuffer(&IID_ID3D11Texture2D, d3d11_texture, subIdx, 0, &buffer);
+    gettimeofday(&end, NULL);
+    current_time = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
+    c->elapsed_buffer_create += current_time;
+    c->frame_count++;
+
     if (FAILED(hr)) {
         av_log(avctx, AV_LOG_ERROR, "Failed to create DXGI surface buffer: %s\n", ff_hr_str(hr));
         IMFSample_Release(sample);
         return AVERROR_EXTERNAL;
     }
 
+    gettimeofday(&start, NULL);
     hr = IMFSample_AddBuffer(sample, buffer);
+    gettimeofday(&end, NULL);
+    seconds = end.tv_sec - start.tv_sec;
+    useconds = end.tv_usec - start.tv_usec;
+    current_time = seconds + useconds / 1e6;
+    c->elapsed_buffer_add += current_time;
+
     if (FAILED(hr)) {
         av_log(avctx, AV_LOG_ERROR, "Failed to add buffer to sample: %s\n", ff_hr_str(hr));
         IMFMediaBuffer_Release(buffer);
@@ -403,6 +443,7 @@ static int process_software_frame(AVCodecContext *avctx, const AVFrame *frame, I
     BYTE *data = NULL;
     HRESULT hr;
     int size, ret;
+    c->frame_count++;
 
     size = av_image_get_buffer_size(avctx->pix_fmt, avctx->width, avctx->height, 1);
     if (size < 0)
@@ -426,8 +467,14 @@ static int process_software_frame(AVCodecContext *avctx, const AVFrame *frame, I
         return AVERROR_EXTERNAL;
     }
 
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
     ret = av_image_copy_to_buffer((uint8_t *)data, size, (void *)frame->data, frame->linesize,
                                   avctx->pix_fmt, avctx->width, avctx->height, 1);
+    gettimeofday(&end, NULL);
+    double current_time = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
+    c->elapsed_copy_image += current_time;
+
     IMFMediaBuffer_SetCurrentLength(buffer, size);
     IMFMediaBuffer_Unlock(buffer);
     IMFMediaBuffer_Release(buffer);
@@ -507,7 +554,13 @@ static int mf_send_sample(AVCodecContext *avctx, IMFSample *sample)
         if (!c->sample_sent)
             IMFSample_SetUINT32(sample, &MFSampleExtension_Discontinuity, TRUE);
         c->sample_sent = 1;
+        struct timeval start, end;
+        gettimeofday(&start, NULL);
         hr = IMFTransform_ProcessInput(c->mft, c->in_stream_id, sample, 0);
+        gettimeofday(&end, NULL);
+        double current_time = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
+        c->elapsed_process += current_time;
+
         if (hr == MF_E_NOTACCEPTING) {
             return AVERROR(EAGAIN);
         } else if (FAILED(hr)) {
@@ -565,7 +618,12 @@ static int mf_receive_sample(AVCodecContext *avctx, IMFSample **out_sample)
         };
 
         st = 0;
+        struct timeval start, end;
+        gettimeofday(&start, NULL);
         hr = IMFTransform_ProcessOutput(c->mft, 0, 1, &out_buffers, &st);
+        gettimeofday(&end, NULL);
+        double current_time = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
+        c->elapsed_output += current_time;
 
         if (out_buffers.pEvents)
             IMFCollection_Release(out_buffers.pEvents);
@@ -1342,6 +1400,33 @@ static int mf_close(AVCodecContext *avctx)
 {
     MFContext *c = avctx->priv_data;
 
+    // Print timing statistics
+    if (c->frame_count > 0) {
+        av_log(avctx, AV_LOG_INFO, "MF encoder timing stats for %d frames:\n", c->frame_count);
+        av_log(avctx, AV_LOG_INFO, "Copy operations:\n");
+        av_log(avctx, AV_LOG_INFO, "  Image copy:        %.6f s total, %.3f ms/frame\n", 
+               c->elapsed_copy_image, (c->elapsed_copy_image * 1000) / c->frame_count);
+        av_log(avctx, AV_LOG_INFO, "  Packet copy:       %.6f s total, %.3f ms/frame\n", 
+               c->elapsed_copy_packet, (c->elapsed_copy_packet * 1000) / c->frame_count);
+        av_log(avctx, AV_LOG_INFO, "Buffer operations:\n");
+        av_log(avctx, AV_LOG_INFO, "  Create buffer:     %.6f s total, %.3f ms/frame\n", 
+               c->elapsed_buffer_create, (c->elapsed_buffer_create * 1000) / c->frame_count);
+        av_log(avctx, AV_LOG_INFO, "  Add buffer:        %.6f s total, %.3f ms/frame\n", 
+               c->elapsed_buffer_add, (c->elapsed_buffer_add * 1000) / c->frame_count);
+        av_log(avctx, AV_LOG_INFO, "MF operations:\n");
+        av_log(avctx, AV_LOG_INFO, "  Process input:     %.6f s total, %.3f ms/frame\n", 
+               c->elapsed_process, (c->elapsed_process * 1000) / c->frame_count);
+        av_log(avctx, AV_LOG_INFO, "  Process output:    %.6f s total, %.3f ms/frame\n", 
+               c->elapsed_output, (c->elapsed_output * 1000) / c->frame_count);
+        av_log(avctx, AV_LOG_INFO, "  Wait events:       %.6f s total, %.3f ms/frame\n", 
+               c->elapsed_wait, (c->elapsed_wait * 1000) / c->frame_count);
+        double total_time = c->elapsed_copy_image + c->elapsed_copy_packet + 
+                           c->elapsed_buffer_create + c->elapsed_buffer_add + 
+                           c->elapsed_process + c->elapsed_output + c->elapsed_wait;
+        av_log(avctx, AV_LOG_INFO, "Total time:          %.6f s total, %.3f ms/frame\n", 
+               total_time, (total_time * 1000) / c->frame_count);
+    }
+
     if (c->codec_api)
         ICodecAPI_Release(c->codec_api);
 
@@ -1370,9 +1455,21 @@ static int mf_close(AVCodecContext *avctx)
 static av_cold int mf_init(AVCodecContext *avctx)
 {
     int ret;
+    MFContext *c = avctx->priv_data;
+
+    // Initialize timing measurements
+    c->elapsed_copy_image = 0;
+    c->elapsed_copy_packet = 0;
+    c->elapsed_process = 0;
+    c->elapsed_output = 0;
+    c->elapsed_buffer_create = 0;
+    c->elapsed_buffer_add = 0;
+    c->elapsed_wait = 0;
+    c->frame_count = 0;
+
     if ((ret = mf_load_library(avctx)) == 0) {
-           if ((ret = mf_init_encoder(avctx)) == 0) {
-                return 0;
+        if ((ret = mf_init_encoder(avctx)) == 0) {
+            return 0;
         }
     }
     return ret;
@@ -1419,8 +1516,7 @@ static const AVOption venc_opts[] = {
     { "default",      "Default mode", 0, AV_OPT_TYPE_CONST, {.i64 = -1}, 0, 0, VE, .unit = "rate_control"},
     { "cbr",          "CBR mode", 0, AV_OPT_TYPE_CONST, {.i64 = ff_eAVEncCommonRateControlMode_CBR}, 0, 0, VE, .unit = "rate_control"},
     { "pc_vbr",       "Peak constrained VBR mode", 0, AV_OPT_TYPE_CONST, {.i64 = ff_eAVEncCommonRateControlMode_PeakConstrainedVBR}, 0, 0, VE, .unit = "rate_control"},
-    { "u_vbr",        "Unconstrained VBR mode", 0, AV_OPT_TYPE_CONST, {.i64 = ff_eAVEncCommonRateControlMode_UnconstrainedVBR}, 0, 0, VE, .unit = "rate_control"},
-    { "quality",      "Quality mode", 0, AV_OPT_TYPE_CONST, {.i64 = ff_eAVEncCommonRateControlMode_Quality}, 0, 0, VE, .unit = "rate_control" },
+    { "u_vbr",        "Unconstrained VBR mode", 0, AV_OPT_TYPE_CONST, {.i64 = ff_eAVEncCommonRateControlMode_UnconstrainedVBR}, 0, 0, VE, .unit = "rate_control" },
     // The following rate_control modes require Windows 8.
     { "ld_vbr",       "Low delay VBR mode", 0, AV_OPT_TYPE_CONST, {.i64 = ff_eAVEncCommonRateControlMode_LowDelayVBR}, 0, 0, VE, .unit = "rate_control"},
     { "g_vbr",        "Global VBR mode", 0, AV_OPT_TYPE_CONST, {.i64 = ff_eAVEncCommonRateControlMode_GlobalVBR}, 0, 0, VE, .unit = "rate_control" },
